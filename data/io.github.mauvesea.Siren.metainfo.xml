@@ -8,13 +8,13 @@
   <developer id="io.github.mauvesea">
     <name>Mauvesea</name>
   </developer>
-  <url type="homepage">https://github.com/mauvesea/pokecry</url>
+  <url type="homepage">https://github.com/mauvesea/siren</url>
   <description>
     <p>
-      Siren prepares a WAV, selects an appropriate conversion preset, and
-      converts it into a three-channel Game Boy cry for pokecrystal. Compare
-      the original and converted sound, try other presets, then export ASM
-      beside the source recording.
+      Siren is a tool designed to convert .wav files into usable pokecrystal
+      .asm files. It analyzes the provided .wav file and selects the appropriate
+      preset. The preset can be changed at any time and both the original
+      .wav file and the converted output can be compared on the tool itself.
     </p>
   </description>
   <launchable type="desktop-id">io.github.mauvesea.Siren.desktop</launchable>

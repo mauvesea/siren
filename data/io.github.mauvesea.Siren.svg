@@ -1,18 +1,90 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Siren: a mermaid with pink hair">
-  <!-- A freeform, deliberately simple silhouette for the GNOME app grid. -->
-  <path d="M43 24c11-10 30-10 41 0 9 8 10 19 6 30-3 9-3 17 5 22-9 7-21 5-30-1L41 81c-12 4-22-3-23-13 9 3 13-3 11-13-2-12 3-24 14-31Z" fill="#b83272"/>
-  <path d="M42 27c10-9 29-10 40 0 8 7 8 18 4 28-4 10-3 17 4 21-13 3-21-5-27-11L41 76c-8 3-14 0-17-5 11-4 10-13 10-19-1-10 1-19 8-25Z" fill="#e65796"/>
-  <path d="M53 37c4-7 17-10 24-3 7 6 7 20 1 29-4 6-10 10-16 10s-14-6-17-13c-3-8 0-18 8-23Z" fill="#f7c8a7"/>
-  <path d="M46 59c4 8 11 14 17 14 5 0 10-3 14-8-4 9-10 14-16 14-7 0-13-7-15-20Z" fill="#dfa98e"/>
-  <path d="M48 36c7-12 24-16 34-6 5 6 6 13 4 21-4-9-11-14-19-15-8 7-15 9-26 10 0-4 3-8 7-10Z" fill="#f27cad"/>
-  <path d="M40 42c-1 12 2 21 7 28-9-3-14-13-12-23Z" fill="#f27cad"/>
-  <path d="M53 40c-2 11-8 20-15 27-4-12-2-26 8-35Z" fill="#d74483"/>
-  <path d="M66 76c-8 2-16 7-18 17-2 8 1 17 9 21 9 5 20 1 29-5 7 6 16 9 26 8-3-7-9-13-17-16 7-4 12-11 12-19-8 1-14 7-18 13-9 6-17 3-21-3-3-5-2-11-2-16Z" fill="#237f8c"/>
-  <path d="M65 80c-8 2-13 9-13 17 0 8 5 15 13 16 7 1 15-3 21-9 7 5 14 8 22 8-4-5-9-8-16-10 7-4 11-9 12-15-7 2-12 7-16 13-10 7-20 1-23-7-2-5-1-9 0-13Z" fill="#48b9b6"/>
-  <path d="M57 92c0 9 6 15 14 15 5 0 10-2 14-5-7 8-15 12-22 10-8-3-12-11-9-20Z" fill="#84d4cb"/>
-  <path d="M51 72c6 2 15 2 22-1 5 4 8 10 8 17-8 4-19 4-27-1-3-5-4-10-3-15Z" fill="#f2b99c"/>
-  <path d="M53 76c6 2 13 2 19-1 4 2 6 5 8 9-9 4-18 4-26 0Z" fill="#9c72c7"/>
-  <path d="M55 80c3 1 5 1 8 1m5-1c3 0 5-1 8-2" fill="none" stroke="#caa6e2" stroke-linecap="round" stroke-width="2"/>
-  <path d="M55 47c2 1 4 1 6 0m9 0c2 1 4 1 6-1" fill="none" stroke="#925f65" stroke-linecap="round" stroke-width="2"/>
-  <path d="M59 59c3 2 7 2 10 0" fill="none" stroke="#c47f82" stroke-linecap="round" stroke-width="2"/>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 128 128"
+   role="img"
+   aria-label="Siren: a mermaid with pastel pink hair and open arms"
+   version="1.1"
+   id="svg13"
+   sodipodi:docname="io.github.mauvesea.Siren.svg"
+   inkscape:version="1.4.4 (dcaf3e7d9e, 2026-05-05)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs13" />
+  <sodipodi:namedview
+     id="namedview13"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="1.5625"
+     inkscape:cx="-172.16"
+     inkscape:cy="-16.64"
+     inkscape:window-width="1920"
+     inkscape:window-height="1011"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg13" />
+  <!-- Simple shapes and soft colors keep the figure legible at app icon size. -->
+  <path
+     d="M43 24c11-10 30-10 41 0 9 8 10 19 6 30-3 9-3 17 5 22-9 7-21 5-30-1L41 81c-12 4-22-3-23-13 9 3 13-3 11-13-2-12 3-24 14-31Z"
+     fill="#c788aa"
+     id="path1" />
+  <path
+     d="M42 27c10-9 29-10 40 0 8 7 8 18 4 28-4 10-3 17 4 21-13 3-21-5-27-11L41 76c-8 3-14 0-17-5 11-4 10-13 10-19-1-10 1-19 8-25Z"
+     fill="#f0a7c7"
+     id="path2" />
+  <path
+     d="M64 80c-9 3-16 11-16 20 0 9 6 16 15 17 8 1 17-3 24-9 7 6 16 9 25 8-3-7-9-12-17-15 7-4 12-11 12-19-8 1-15 7-19 13-9 6-16 2-20-4-3-4-4-8-4-11Z"
+     fill="#6aafb4"
+     id="path3" />
+  <path
+     d="m 64,84 c -7,3 -12,10 -12,17 0,7 5,12 12,13 8,1 16,-4 22,-10 7,5 14,8 22,8 -4,-5 -9,-8 -16,-10 7,-4 11,-9 12,-15 -7,2 -13.96,8.12 -17.96,14.12 -5.078842,1.75919 -9.124265,1.06049 -12.299321,0.19052 C 68.975795,100.00493 67.880347,97.360927 65,93 64,90 64,87 64,84 Z"
+     fill="#91d4d3"
+     id="path4"
+     sodipodi:nodetypes="csccccccscc" />
+  <path
+     d="M56 94c-1 9 5 16 13 16 6 0 11-3 16-7-7 8-15 12-22 10-8-3-12-11-7-19Z"
+     fill="#b8e7dc"
+     id="path5" />
+  <path
+     d="m 57,74 c -5,0 -9,5 -15,8 l -13,6 c -2,1 -3,3 -2,5 1,2 4,2 6,1 l 15,-6 c 5,-2 10,-5 14,-9 l -1.995495,-4.484511 z"
+     fill="#ffe2d0"
+     id="path6"
+     sodipodi:nodetypes="cccscsccc" />
+  <path
+     d="m 68.436182,73.773726 c 5,0 9,5 15,8 l 11,4 c 3,1 4,3 3,5 -1,2 -4,2 -6,1 l -14,-5 c -5,-2 -10,-5 -14,-8 l 0.541136,-4.840345 z"
+     fill="#ffe2d0"
+     id="path7"
+     sodipodi:nodetypes="cccsccccc" />
+  <path
+     d="M53 37c4-7 17-10 24-3 7 6 7 20 1 29-4 6-10 10-16 10s-14-6-17-13c-3-8 0-18 8-23Z"
+     fill="#ffe2d0"
+     id="path8" />
+  <path
+     d="m 57.843597,69.981766 c 3.127569,3.121218 6.946106,2.838376 10.073676,-0.282842 0.830577,1.657782 -0.03451,2.951933 1.177554,4.512502 1.830645,2.357018 4.118249,2.130984 3.804632,4.634827 C 72.378198,83.007877 66.717188,89.919187 64.632142,92 c -2.606308,0 -8.637881,-3.529341 -10.722928,-5.610152 -0.808767,-4.035624 2.61144,-7.252764 3.441575,-11.849972 0.239932,-1.328722 0.142173,-3.391702 0.492808,-4.55811 z"
+     fill="#ffe2d0"
+     id="path9"
+     style="stroke-width:0.736426"
+     sodipodi:nodetypes="ccssccsc" />
+  <path
+     d="m 59.886863,77.678823 c -4.081666,0.583095 -4.63762,3.328507 -5.812061,6.264608 -0.517532,1.293829 0.265888,0.964731 1.043548,2.010929 0.470208,0.632579 1.850102,1.867709 2.956453,2.310249 2.076136,0.830455 4.211145,1.058798 5.999999,-0.282841 C 66.337544,86.28471 66,84 66,81 65,79 62.856711,77.254558 59.886863,77.678823 Z"
+     fill="#c9a9df"
+     id="path10"
+     sodipodi:nodetypes="ssssscs" />
+  <path
+     d="m 69.094904,78.301077 c -0.736817,0.08496 -1.693153,0.08099 -2.3686,0.525796 -1.127741,0.742659 -1.753557,0.868637 -2.368659,3.286264 -0.779718,3.064643 -1.746294,5.429579 1.189807,6.60402 1.01548,0.406192 1.07779,0.448286 1.63069,0.37493 1.191314,-0.158059 2.495952,-0.782216 3.18137,-1.696107 1.697056,-2.262742 1.901153,-3.249522 1.812061,-5.302944 -0.09692,-2.233967 -1.089835,-4.021063 -3.076669,-3.791959 z"
+     fill="#c9a9df"
+     id="path11"
+     sodipodi:nodetypes="sassasss" />
+  <path
+     d="M47 35c7-11 24-16 35-5 5 6 6 13 4 21-4-9-11-14-19-15-8 7-15 9-26 10 0-4 2-7 6-11Z"
+     fill="#f7b7d1"
+     id="path12" />
 </svg>
