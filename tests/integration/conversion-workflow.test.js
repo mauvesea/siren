@@ -1,13 +1,29 @@
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
-import { convert, encodeWav, makeAsm, prepareWav, readWav } from '../../src/converter.js';
+import { convert, encodeWav, makeAsm, makePlaybackWav, prepareWav, readWav } from '../../src/converter.js';
 import { fitAutoPreset, suggestPreset } from '../../src/preset-engine.js';
 import { loadPresets } from '../../src/preset-loader.js';
 import { renderPreview } from '../../src/preview.js';
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
+}
+
+function encodeUnsigned8Wav(samples, rate, channels = 1) {
+  const buffer = new ArrayBuffer(44 + samples.length);
+  const view = new DataView(buffer);
+  const write = (offset, value) => {
+    for (let i = 0; i < value.length; i++) view.setUint8(offset + i, value.charCodeAt(i));
+  };
+  write(0, 'RIFF'); view.setUint32(4, buffer.byteLength - 8, true); write(8, 'WAVE');
+  write(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true);
+  view.setUint16(22, channels, true); view.setUint32(24, rate, true);
+  view.setUint32(28, rate * channels, true);
+  view.setUint16(32, channels, true); view.setUint16(34, 8, true);
+  write(36, 'data'); view.setUint32(40, samples.length, true);
+  new Uint8Array(buffer, 44).set(samples);
+  return buffer;
 }
 
 const root = GLib.get_current_dir();
@@ -36,6 +52,19 @@ const samples = Float64Array.from({ length: 17 * 176 }, (_, i) => {
     0.24 * Math.sin(2 * Math.PI * 372 * time);
 });
 const source = readWav(encodeWav(samples, rate));
+const uncommonSource = readWav(encodeUnsigned8Wav(
+  Uint8Array.from({ length: rate }, (_, i) => 128 + Math.round(80 * Math.sin(2 * Math.PI * 220 * i / rate))),
+  rate));
+const playback = readWav(makePlaybackWav(uncommonSource));
+assert(playback.rate === 44100 && playback.samples.length === 44100,
+  'Unsigned 8-bit low-rate WAV playback should be normalized to 16-bit 44.1 kHz.');
+const stereoSource = readWav(encodeUnsigned8Wav(
+  Uint8Array.from({ length: rate * 2 }, (_, i) =>
+    128 + Math.round(70 * Math.sin(2 * Math.PI * (i % 2 ? 330 : 220) * Math.floor(i / 2) / rate))),
+  rate, 2));
+const stereoPlayback = readWav(makePlaybackWav(stereoSource));
+assert(stereoPlayback.channels === 2 && stereoPlayback.samples.length === 44100,
+  'Playback normalization should preserve the source channel layout.');
 const prepared = prepareWav(source);
 const cleanPreset = presets.find(preset => preset.id === 'clean');
 const project = { ...convert(readWav(prepared.wav).samples, cleanPreset.options), label: 'TwoTones' };

@@ -11,7 +11,7 @@ function timeline(notes) {
   let end = 0;
   return notes.map(note => {
     const start = end;
-    end += note.duration + 1;
+    end += note.frames ?? note.duration + 1;
     return { note, start, end };
   });
 }
@@ -24,16 +24,17 @@ function envelopeVolume(note, noteTime) {
   return Math.max(0, Math.min(15, note.volume + (raw & 8 ? steps : -steps)));
 }
 
-export function renderPreview(project) {
+export function renderPreview(project, maxSeconds = 10) {
   const outputRate = OUTPUT_RATE;
   const { ch5, ch6, ch8 } = project.channels;
   const tracks = [timeline(ch5), timeline(ch6), timeline(ch8)];
   const totalFrames = Math.max(...tracks.map(track => track.at(-1)?.end ?? 0), 1);
-  if (totalFrames / FRAME_RATE > 10) throw new Error('Preview is limited to 10 seconds. Shorten edited note lengths to play it.');
+  if (totalFrames / FRAME_RATE > maxSeconds && !project.allowTruncatedPreview)
+    throw new Error(`Preview is limited to ${maxSeconds} seconds.`);
   const duration = project.previewDuration ?? project.sourceDuration ?? totalFrames / FRAME_RATE;
-  const count = Math.ceil(Math.min(totalFrames / FRAME_RATE, duration) * outputRate);
+  const count = Math.ceil(Math.min(totalFrames / FRAME_RATE, duration, maxSeconds) * outputRate);
   const samples = new Float64Array(count);
-  const voices = [ch5, ch6].map(() => ({ index: -1, phase: 0 }));
+  const voices = [ch5, ch6].map(() => ({ index: -1, phase: 0, frequency: 0, sweepStep: 0, silent: false }));
   const noise = { index: -1, lfsr: 0x7fff, phase: 0 };
   const positions = [0, 0, 0];
   let peak = 0, filtered = 0;
@@ -47,13 +48,32 @@ export function renderPreview(project) {
       const current = tracks[ch][positions[ch]];
       if (!current) continue;
       const index = positions[ch];
-      if (index !== voices[ch].index) { voices[ch].index = index; voices[ch].phase = 0; }
+      if (index !== voices[ch].index) {
+        voices[ch].index = index;
+        voices[ch].phase = 0;
+        voices[ch].frequency = current.note.frequency;
+        voices[ch].sweepStep = 0;
+        voices[ch].silent = false;
+      }
       const note = current.note;
       if (!note.volume) continue;
-      const hz = 131072 / (2048 - note.frequency);
+      if (ch === 0 && note.sweep && note.sweep[1] !== 8) {
+        const [period, signedShift] = note.sweep;
+        const interval = ((period & 7) || 8) / 128;
+        const expected = Math.floor((time - current.start / FRAME_RATE) / interval);
+        while (voices[ch].sweepStep < expected && !voices[ch].silent) {
+          const delta = voices[ch].frequency >> Math.abs(signedShift);
+          voices[ch].frequency += signedShift < 0 ? -delta : delta;
+          if (voices[ch].frequency < 0 || voices[ch].frequency > 2047) voices[ch].silent = true;
+          voices[ch].sweepStep++;
+        }
+      }
+      if (voices[ch].silent) continue;
+      const hz = 131072 / (2048 - voices[ch].frequency);
       voices[ch].phase = (voices[ch].phase + hz / outputRate) % 1;
       const dutyIndex = Math.floor(voices[ch].phase * 8) & 7;
-      const bit = (DUTY_PATTERNS[note.duty] >> (7 - dutyIndex)) & 1;
+      const duty = note.dutyPattern?.[(Math.floor(frame) - (note.patternStart ?? 0)) & 3] ?? note.duty;
+      const bit = (DUTY_PATTERNS[duty] >> (7 - dutyIndex)) & 1;
       const noteTime = (frame - current.start) / FRAME_RATE;
       mixed += (bit ? 1 : -1) * envelopeVolume(note, noteTime) / 15 * 0.27;
     }

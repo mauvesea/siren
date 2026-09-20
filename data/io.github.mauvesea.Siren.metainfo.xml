@@ -2,7 +2,7 @@
 <component type="desktop-application">
   <id>io.github.mauvesea.Siren</id>
   <name>Siren</name>
-  <summary>Turn WAV audio into pokecrystal cries</summary>
+  <summary>Convert and audition pokecrystal cries</summary>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
   <developer id="io.github.mauvesea">
@@ -11,10 +11,11 @@
   <url type="homepage">https://github.com/mauvesea/siren</url>
   <description>
     <p>
-      Siren is a tool designed to convert .wav files into usable pokecrystal
-      .asm files. It analyzes the provided .wav file and selects the appropriate
-      preset. The preset can be changed at any time and both the original
-      .wav file and the converted output can be compared on the tool itself.
+      Siren converts .wav files into usable pokecrystal .asm cries. It analyzes
+      the audio, recommends a conversion preset, and lets users compare the
+      source with the synthesized result. Its parameter validator opens cry
+      .asm files and previews pokecrystal pitch and length values without
+      modifying or exporting the file.
     </p>
   </description>
   <launchable type="desktop-id">io.github.mauvesea.Siren.desktop</launchable>

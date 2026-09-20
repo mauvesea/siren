@@ -10,6 +10,20 @@ const DUTIES = [0.125, 0.25, 0.5, 0.75];
 const clamp = (value, lo, hi) => Math.max(lo, Math.min(hi, value));
 const round = Math.round;
 
+function decodeSample(view, offset, code, bits) {
+  let value;
+  if (code === 3) value = bits === 32 ? view.getFloat32(offset, true) : view.getFloat64(offset, true);
+  else if (bits === 8) value = (view.getUint8(offset) - 128) / 128;
+  else if (bits === 16) value = view.getInt16(offset, true) / 32768;
+  else if (bits === 24) {
+    let raw = view.getUint8(offset) | view.getUint8(offset + 1) << 8 | view.getUint8(offset + 2) << 16;
+    if (raw & 0x800000) raw -= 0x1000000;
+    value = raw / 8388608;
+  } else value = view.getInt32(offset, true) / 2147483648;
+  if (!Number.isFinite(value)) throw new Error('The WAV contains invalid floating-point samples.');
+  return clamp(value, -1, 1);
+}
+
 export function readWav(buffer) {
   const view = new DataView(buffer);
   if (view.byteLength < 44 || fourcc(view, 0) !== 'RIFF' || fourcc(view, 8) !== 'WAVE') {
@@ -56,21 +70,14 @@ export function readWav(buffer) {
     let sum = 0;
     for (let ch = 0; ch < channels; ch++) {
       const offset = audio.begin + i * align + ch * width;
-      let value;
-      if (code === 3) value = bits === 32 ? view.getFloat32(offset, true) : view.getFloat64(offset, true);
-      else if (bits === 8) value = (view.getUint8(offset) - 128) / 128;
-      else if (bits === 16) value = view.getInt16(offset, true) / 32768;
-      else if (bits === 24) {
-        let raw = view.getUint8(offset) | view.getUint8(offset + 1) << 8 | view.getUint8(offset + 2) << 16;
-        if (raw & 0x800000) raw -= 0x1000000;
-        value = raw / 8388608;
-      } else value = view.getInt32(offset, true) / 2147483648;
-      if (!Number.isFinite(value)) throw new Error('The WAV contains invalid floating-point samples.');
-      sum += clamp(value, -1, 1);
+      sum += decodeSample(view, offset, code, bits);
     }
     mono[i] = sum / channels;
   }
-  return { samples: mono, rate, channels, duration: count / rate };
+  return {
+    samples: mono, rate, channels, duration: count / rate,
+    playback: { buffer, begin: audio.begin, count, align, code, bits },
+  };
 }
 
 function fourcc(view, at) {
@@ -107,6 +114,56 @@ export function encodeWav(samples, rate) {
   write(36, 'data'); view.setUint32(40, samples.length * 2, true);
   for (let i = 0; i < samples.length; i++) view.setInt16(44 + 2 * i, round(clamp(samples[i], -1, 1) * 32767), true);
   return buffer;
+}
+
+// Decode once with Siren's WAV reader, then give GStreamer a conservative
+// format. Some system sinks fail to negotiate uncommon source formats such as
+// unsigned 8-bit PCM at the Game Boy-oriented 10,512 Hz sample rate.
+export function makePlaybackWav(source, outputRate = 44100) {
+  if (!source?.samples?.length || !Number.isFinite(source.rate) || source.rate <= 0 ||
+      !Number.isInteger(outputRate) || outputRate < 8000 || outputRate > 192000)
+    throw new Error('Could not prepare this WAV for playback.');
+  const count = Math.max(1, Math.round(source.samples.length * outputRate / source.rate));
+  if (!source.playback) {
+    const samples = new Float64Array(count);
+    for (let i = 0; i < count; i++) {
+      const position = i * source.rate / outputRate;
+      const first = Math.floor(position);
+      const second = Math.min(source.samples.length - 1, first + 1);
+      const fraction = position - first;
+      samples[i] = source.samples[first] * (1 - fraction) + source.samples[second] * fraction;
+    }
+    return encodeWav(samples, outputRate);
+  }
+
+  const { buffer, begin, align, code, bits } = source.playback;
+  const input = new DataView(buffer);
+  const channels = source.channels;
+  const width = bits / 8;
+  const output = new ArrayBuffer(44 + count * channels * 2);
+  const view = new DataView(output);
+  const write = (offset, string) => {
+    for (let i = 0; i < string.length; i++) view.setUint8(offset + i, string.charCodeAt(i));
+  };
+  write(0, 'RIFF'); view.setUint32(4, output.byteLength - 8, true); write(8, 'WAVE');
+  write(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true);
+  view.setUint16(22, channels, true); view.setUint32(24, outputRate, true);
+  view.setUint32(28, outputRate * channels * 2, true);
+  view.setUint16(32, channels * 2, true); view.setUint16(34, 16, true);
+  write(36, 'data'); view.setUint32(40, count * channels * 2, true);
+  for (let i = 0; i < count; i++) {
+    const position = i * source.rate / outputRate;
+    const first = Math.floor(position);
+    const second = Math.min(source.playback.count - 1, first + 1);
+    const fraction = position - first;
+    for (let ch = 0; ch < channels; ch++) {
+      const a = decodeSample(input, begin + first * align + ch * width, code, bits);
+      const b = decodeSample(input, begin + second * align + ch * width, code, bits);
+      const sample = a * (1 - fraction) + b * fraction;
+      view.setInt16(44 + (i * channels + ch) * 2, round(clamp(sample, -1, 1) * 32767), true);
+    }
+  }
+  return output;
 }
 
 function fftMagnitude(samples) {

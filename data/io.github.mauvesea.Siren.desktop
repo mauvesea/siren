@@ -1,6 +1,6 @@
 [Desktop Entry]
 Name=Siren
-Comment=Convert .wav files into pret's pokecrystal compatible .asm files.
+Comment=Convert and audition pokecrystal cry files.
 Exec=siren %f
 Icon=io.github.mauvesea.Siren
 Terminal=false
@@ -8,4 +8,4 @@ Type=Application
 Categories=AudioVideo;Audio;
 MimeType=audio/x-wav;audio/wav;
 StartupNotify=true
-Keywords=pret;pokecrystal;cry;WAV;ASM;
+Keywords=pret;pokecrystal;cry;WAV;ASM;pitch;length;

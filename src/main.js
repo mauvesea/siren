@@ -8,10 +8,11 @@ import GLib from 'gi://GLib';
 import Gst from 'gi://Gst?version=1.0';
 import Gtk from 'gi://Gtk?version=4.0';
 
-import { MAX_BYTES, MAX_SECONDS, makeAsm, prepareWav, readWav, suggestedLabel, convert } from './converter.js';
+import { MAX_BYTES, MAX_SECONDS, makeAsm, makePlaybackWav, prepareWav, readWav, suggestedLabel, convert } from './converter.js';
 import { fitAutoPreset, suggestPreset } from './preset-engine.js';
 import { loadPresetDirectories } from './preset-loader.js';
 import { renderPreview } from './preview.js';
+import { applyCryParameters, parseCryAsm, PITCH_MIN, PITCH_MAX, LENGTH_MIN, LENGTH_MAX } from './cry-asm.js';
 
 const APP_ID = 'io.github.mauvesea.Siren';
 const VERSION = '1.0.0';
@@ -91,6 +92,12 @@ class SirenWindow {
     this.sourceFile = null;
     this.project = null;
     this.previewFile = null;
+    this.originalPreviewFile = null;
+    this.validationFile = null;
+    this.cry = null;
+    this.validationSerial = 0;
+    this.validationTimer = 0;
+    this.resumeValidation = false;
     this.conversionSerial = 0;
     this.ignorePresetChanges = false;
 
@@ -120,7 +127,9 @@ class SirenWindow {
 
     this.toastOverlay = new Adw.ToastOverlay();
     this.stack = new Gtk.Stack({ transition_type: Gtk.StackTransitionType.CROSSFADE });
-    this.toastOverlay.child = this.stack;
+    this.modeStack = new Gtk.Stack({ transition_type: Gtk.StackTransitionType.CROSSFADE });
+    this.modeStack.add_titled(this.stack, 'converter', 'File Converter');
+    this.toastOverlay.child = this.modeStack;
 
     const toolbar = new Adw.ToolbarView();
     const header = new Adw.HeaderBar();
@@ -134,16 +143,52 @@ class SirenWindow {
     });
     header.pack_end(menuButton);
     toolbar.add_top_bar(header);
+
+    const modeButtons = new Gtk.Box({
+      orientation: Gtk.Orientation.HORIZONTAL,
+      spacing: 12,
+      halign: Gtk.Align.CENTER,
+      margin_top: 4,
+      margin_bottom: 10,
+    });
+    this.converterModeButton = new Gtk.ToggleButton({ label: 'File Converter', active: true });
+    this.validationModeButton = new Gtk.ToggleButton({ label: 'Parameter Validation' });
+    this.validationModeButton.set_group(this.converterModeButton);
+    this.converterModeButton.add_css_class('flat');
+    this.validationModeButton.add_css_class('flat');
+    this.converterModeButton.connect('toggled', () => {
+      if (this.converterModeButton.active) this.modeStack.visible_child_name = 'converter';
+    });
+    this.validationModeButton.connect('toggled', () => {
+      if (this.validationModeButton.active) this.modeStack.visible_child_name = 'validation';
+    });
+    modeButtons.append(this.converterModeButton);
+    modeButtons.append(this.validationModeButton);
+    toolbar.add_top_bar(modeButtons);
     toolbar.content = this.toastOverlay;
     this.window.content = toolbar;
 
     this.buildEmptyPage();
     this.buildContentPage();
+    this.buildValidationPage();
     this.stack.visible_child_name = 'empty';
+    this.modeStack.connect('notify::visible-child-name', () => {
+      this.converterModeButton.active = this.modeStack.visible_child_name === 'converter';
+      this.validationModeButton.active = this.modeStack.visible_child_name === 'validation';
+      this.originalPlayer.stop();
+      this.convertedPlayer.stop();
+      this.validationPlayer.stop();
+    });
 
     const dropTarget = Gtk.DropTarget.new(Gio.File.$gtype, Gdk.DragAction.COPY);
     dropTarget.connect('drop', (_target, file) => {
-      this.loadFile(file);
+      if (/\.asm$/i.test(file.get_basename())) {
+        this.modeStack.visible_child_name = 'validation';
+        this.loadAsm(file);
+      } else {
+        this.modeStack.visible_child_name = 'converter';
+        this.loadFile(file);
+      }
       return true;
     });
     this.window.add_controller(dropTarget);
@@ -151,7 +196,12 @@ class SirenWindow {
     this.window.connect('close-request', () => {
       this.originalPlayer.stop();
       this.convertedPlayer.stop();
+      this.validationPlayer.stop();
+      if (this.validationTimer) GLib.source_remove(this.validationTimer);
+      this.validationSerial++;
       this.removePreviewFile();
+      this.removeOriginalPreviewFile();
+      this.removeValidationFile();
       return false;
     });
   }
@@ -261,6 +311,70 @@ class SirenWindow {
     this.convertedPlayer = new AudioPlayer(this.convertedButton, started, playbackError);
   }
 
+  buildValidationPage() {
+    const body = new Gtk.Box({
+      orientation: Gtk.Orientation.VERTICAL, spacing: 24,
+      margin_top: 24, margin_bottom: 32, margin_start: 12, margin_end: 12,
+    });
+    const source = new Adw.PreferencesGroup();
+    this.validationRow = new Adw.ActionRow({
+      title: 'Select a cry',
+      subtitle: 'Open a pokecrystal cry .asm file to audition its parameters.',
+    });
+    this.validationRow.add_prefix(new Gtk.Image({ icon_name: 'text-x-generic-symbolic' }));
+    const open = new Gtk.Button({ label: 'Open…', valign: Gtk.Align.CENTER });
+    open.connect('clicked', () => this.chooseAsm());
+    this.validationRow.add_suffix(open);
+    source.add(this.validationRow);
+    this.cryChoice = new Adw.ComboRow({ title: 'Cry', visible: false });
+    this.cryChoice.connect('notify::selected', () => {
+      if (!this.asmText || this.ignoreCryChoice) return;
+      try {
+        this.cry = parseCryAsm(this.asmText, this.cryNames[this.cryChoice.selected]);
+        this.validationRow.subtitle = `${this.cry.label} · ${Object.values(this.cry.channels).filter(notes => notes.length).length} channels`;
+        this.scheduleValidation();
+      } catch (error) { this.showToast(error.message); }
+    });
+    source.add(this.cryChoice);
+    body.append(source);
+
+    const controls = new Adw.PreferencesGroup({ title: 'Parameters' });
+    const pitchRow = new Adw.ActionRow({ title: 'Pitch', subtitle: 'Frequency offset · −32768 to 32767' });
+    this.pitchSpin = new Gtk.SpinButton({
+      adjustment: new Gtk.Adjustment({ value: 0, lower: PITCH_MIN, upper: PITCH_MAX, step_increment: 1, page_increment: 16 }),
+      digits: 0, numeric: true, valign: Gtk.Align.CENTER, width_chars: 8,
+    });
+    pitchRow.add_suffix(this.pitchSpin);
+    controls.add(pitchRow);
+    const lengthRow = new Adw.ActionRow({ title: 'Length', subtitle: 'Tempo value · 0 to 65535' });
+    this.lengthSpin = new Gtk.SpinButton({
+      adjustment: new Gtk.Adjustment({ value: 256, lower: LENGTH_MIN, upper: LENGTH_MAX, step_increment: 1, page_increment: 16 }),
+      digits: 0, numeric: true, valign: Gtk.Align.CENTER, width_chars: 8,
+    });
+    lengthRow.add_suffix(this.lengthSpin);
+    controls.add(lengthRow);
+    body.append(controls);
+
+    const sound = new Adw.PreferencesGroup({ title: 'Preview' });
+    this.validationButton = new Gtk.Button({ icon_name: 'media-playback-start-symbolic', sensitive: false, valign: Gtk.Align.CENTER });
+    this.validationButton.add_css_class('circular');
+    this.validationSoundRow = new Adw.ActionRow({ title: '', visible: false });
+    this.validationSoundRow.add_prefix(new Gtk.Image({ icon_name: 'audio-speakers-symbolic' }));
+    this.validationSoundRow.add_suffix(this.validationButton);
+    sound.add(this.validationSoundRow);
+    body.append(sound);
+
+    const clamp = new Adw.Clamp({ maximum_size: 640, tightening_threshold: 520, child: body });
+    const scroll = new Gtk.ScrolledWindow({ child: clamp, hscrollbar_policy: Gtk.PolicyType.NEVER, propagate_natural_height: true });
+    this.modeStack.add_titled(scroll, 'validation', 'Parameter Validation');
+    this.validationPlayer = new AudioPlayer(this.validationButton, active => {
+      for (const player of [this.originalPlayer, this.convertedPlayer, this.validationPlayer])
+        if (player && player !== active) player.stop();
+    }, message => this.showToast(message));
+    this.pitchSpin.connect('value-changed', () => this.scheduleValidation());
+    this.lengthSpin.connect('value-changed', () => this.scheduleValidation());
+  }
+
   present() {
     this.window.present();
   }
@@ -270,6 +384,7 @@ class SirenWindow {
   }
 
   chooseFile() {
+    if (this.modeStack.visible_child_name === 'validation') { this.chooseAsm(); return; }
     const filter = new Gtk.FileFilter({ name: 'WAV audio' });
     filter.add_mime_type('audio/wav');
     filter.add_mime_type('audio/x-wav');
@@ -285,6 +400,94 @@ class SirenWindow {
         if (!error.matches?.(Gtk.DialogError, Gtk.DialogError.DISMISSED)) this.showToast(error.message);
       }
     });
+  }
+
+  chooseAsm() {
+    const filter = new Gtk.FileFilter({ name: 'Cry ASM' });
+    filter.add_pattern('*.asm');
+    filter.add_pattern('*.ASM');
+    const filters = new Gio.ListStore({ item_type: Gtk.FileFilter });
+    filters.append(filter);
+    const dialog = new Gtk.FileDialog({ title: 'Open Cry ASM', filters, default_filter: filter });
+    dialog.open(this.window, null, (source, result) => {
+      try { this.loadAsm(source.open_finish(result)); }
+      catch (error) {
+        if (!error.matches?.(Gtk.DialogError, Gtk.DialogError.DISMISSED)) this.showToast(error.message);
+      }
+    });
+  }
+
+  loadAsm(file) {
+    try {
+      if (!/\.asm$/i.test(file.get_basename())) throw new Error('Choose a .asm file.');
+      const info = file.query_info('standard::size', Gio.FileQueryInfoFlags.NONE, null);
+      if (info.get_size() > 2 * 1024 * 1024) throw new Error('Choose an ASM file smaller than 2 MB.');
+      const [, contents] = file.load_contents(null);
+      const asmText = new TextDecoder('utf-8', { fatal: true }).decode(contents);
+      const cry = parseCryAsm(asmText);
+      this.validationPlayer.stop();
+      this.resumeValidation = false;
+      this.asmText = asmText;
+      this.cry = cry;
+      this.cryNames = cry.availableCries;
+      this.ignoreCryChoice = true;
+      this.cryChoice.model = Gtk.StringList.new(this.cryNames);
+      this.cryChoice.selected = 0;
+      this.cryChoice.visible = this.cryNames.length > 1;
+      this.ignoreCryChoice = false;
+      this.validationRow.title = file.get_basename();
+      this.validationRow.subtitle = `${cry.label} · ${Object.values(cry.channels).filter(notes => notes.length).length} channels`;
+      this.modeStack.visible_child_name = 'validation';
+      this.scheduleValidation();
+    } catch (error) { this.showToast(`Could not open cry: ${error.message}`); }
+  }
+
+  scheduleValidation() {
+    if (!this.cry) return;
+    const serial = ++this.validationSerial;
+    this.resumeValidation ||= this.validationPlayer.playing;
+    this.validationPlayer.stop();
+    this.validationSoundRow.visible = true;
+    this.validationSoundRow.title = 'Setting Up...';
+    this.validationSoundRow.subtitle = '';
+    this.validationButton.sensitive = false;
+    if (this.validationTimer) GLib.source_remove(this.validationTimer);
+    this.validationTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 120, () => {
+      this.validationTimer = 0;
+      if (serial !== this.validationSerial) return GLib.SOURCE_REMOVE;
+      try {
+        const pitch = this.pitchSpin.get_value_as_int();
+        const length = this.lengthSpin.get_value_as_int();
+        const project = applyCryParameters(this.cry, pitch, length);
+        project.allowTruncatedPreview = true;
+        const wav = renderPreview(project, 15);
+        this.removeValidationFile();
+        const [descriptor, path] = GLib.file_open_tmp('siren-validation-XXXXXX.wav');
+        GLib.close(descriptor);
+        const file = Gio.File.new_for_path(path);
+        file.replace_contents(new Uint8Array(wav), null, false,
+          Gio.FileCreateFlags.REPLACE_DESTINATION, null);
+        this.validationFile = file;
+        this.validationPlayer.setUri(file.get_uri());
+        this.validationSoundRow.title = 'Ready';
+        if (this.resumeValidation) this.validationPlayer.play();
+        this.resumeValidation = false;
+      } catch (error) {
+        this.resumeValidation = false;
+        this.validationSoundRow.title = 'Could Not Prepare Preview';
+        this.validationSoundRow.subtitle = error.message;
+        this.showToast(error.message);
+      }
+      return GLib.SOURCE_REMOVE;
+    });
+  }
+
+  removeValidationFile() {
+    this.validationPlayer?.stop();
+    if (this.validationFile) {
+      try { this.validationFile.delete(null); } catch (_) { /* Already removed. */ }
+      this.validationFile = null;
+    }
   }
 
   loadFile(file) {
@@ -306,7 +509,7 @@ class SirenWindow {
       this.fileRow.title = file.get_basename();
       this.fileRow.subtitle = `${source.channels} channel${source.channels === 1 ? '' : 's'} · ${source.rate.toLocaleString()} Hz · ${formatDuration(source.duration)}`;
       this.originalRow.subtitle = formatDuration(source.duration);
-      this.originalPlayer.setUri(file.get_uri());
+      this.writeOriginalPreview(makePlaybackWav(source));
       this.stack.visible_child_name = 'content';
 
       const suggestion = suggestPreset(preparedSamples);
@@ -376,11 +579,30 @@ class SirenWindow {
     this.convertedPlayer.setUri(file.get_uri());
   }
 
+  writeOriginalPreview(buffer) {
+    this.removeOriginalPreviewFile();
+    const [fileDescriptor, path] = GLib.file_open_tmp('siren-original-XXXXXX.wav');
+    GLib.close(fileDescriptor);
+    const file = Gio.File.new_for_path(path);
+    file.replace_contents(new Uint8Array(buffer), null, false,
+      Gio.FileCreateFlags.REPLACE_DESTINATION, null);
+    this.originalPreviewFile = file;
+    this.originalPlayer.setUri(file.get_uri());
+  }
+
   removePreviewFile() {
     this.convertedPlayer?.stop();
     if (this.previewFile) {
       try { this.previewFile.delete(null); } catch (_) { /* Already removed. */ }
       this.previewFile = null;
+    }
+  }
+
+  removeOriginalPreviewFile() {
+    this.originalPlayer?.stop();
+    if (this.originalPreviewFile) {
+      try { this.originalPreviewFile.delete(null); } catch (_) { /* Already removed. */ }
+      this.originalPreviewFile = null;
     }
   }
 
@@ -474,7 +696,7 @@ if (ARGV.includes('--check-icons')) {
       application_icon: APP_ID,
       developer_name: 'Mauvesea',
       version: VERSION,
-      comments: 'Convert WAV audio into pokecrystal cries.',
+      comments: 'Convert WAV audio and audition pokecrystal cry parameters.',
     });
     about.add_link('Repository', REPOSITORY_URL);
     about.add_link('Report an Issue', `${REPOSITORY_URL}/issues/new`);
@@ -487,7 +709,10 @@ if (ARGV.includes('--check-icons')) {
   });
   application.connect('open', (_app, files) => {
     const window = activeWindow();
-    if (files.length) window.loadFile(files[0]);
+    if (files.length) {
+      if (/\.asm$/i.test(files[0].get_basename())) window.loadAsm(files[0]);
+      else window.loadFile(files[0]);
+    }
   });
   application.run(ARGV);
 }

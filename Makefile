@@ -8,6 +8,7 @@ run:
 
 test:
 	gjs -m tests/integration/conversion-workflow.test.js
+	gjs -m tests/integration/parameter-validation.test.js
 	desktop-file-validate data/io.github.mauvesea.Siren.desktop
 
 appimage:
