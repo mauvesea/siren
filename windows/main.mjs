@@ -56,7 +56,10 @@ function createWindow(initialFile = null) {
     },
   });
   windows.add(window);
-  window.once('ready-to-show', () => window.show());
+  const revealWindow = () => {
+    if (!window.isDestroyed() && !window.isVisible()) window.show();
+  };
+  window.once('ready-to-show', revealWindow);
   window.on('closed', () => windows.delete(window));
   window.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https:\/\//.test(url)) shell.openExternal(url);
@@ -64,6 +67,9 @@ function createWindow(initialFile = null) {
   });
   window.webContents.on('will-navigate', event => event.preventDefault());
   window.loadFile(INDEX).then(() => {
+    // ready-to-show can fail to fire on Windows even after the renderer loads.
+    // Always reveal the loaded window so the process cannot remain invisible.
+    revealWindow();
     if (initialFile) window.webContents.send('app:open-path', resolve(initialFile));
   });
   return window;

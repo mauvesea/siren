@@ -93,3 +93,9 @@ test('the Windows surface declares system theming and accessibility hooks', asyn
   assert.match(html, /aria-live="polite"/);
   assert.match(html, /aria-label="Main navigation"/);
 });
+
+test('the Windows window is revealed after loading if ready-to-show is missed', async () => {
+  const main = await readFile(join(ROOT, 'windows', 'main.mjs'), 'utf8');
+  assert.match(main, /window\.once\('ready-to-show', revealWindow\)/);
+  assert.match(main, /window\.loadFile\(INDEX\)\.then\(\(\) => \{\s*\/\/[^\n]+\n\s*\/\/[^\n]+\n\s*revealWindow\(\)/);
+});
