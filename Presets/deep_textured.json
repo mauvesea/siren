@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "deep_textured",
+  "name": "Deep Textured",
+  "description": "Preserves source-dependent texture with a lower tonal search range.",
+  "type": "profile",
+  "options": {
+    "minHz": 64,
+    "maxHz": 1200,
+    "noisePitch": 44,
+    "noiseGain": 1.35,
+    "secondGain": 0.65,
+    "noiseMode": "texture"
+  }
+}

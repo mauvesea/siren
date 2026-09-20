@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "vibrating",
+  "name": "Vibrating",
+  "description": "Tracks pitch and volume every game frame, with less masking noise.",
+  "type": "profile",
+  "options": {
+    "minHz": 80,
+    "maxHz": 1250,
+    "stepFrames": 1,
+    "noisePitch": 75,
+    "noiseGain": 0.8,
+    "secondGain": 0.8,
+    "noiseMode": "texture",
+    "smoothing": "none"
+  }
+}

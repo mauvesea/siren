@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "deep",
+  "name": "Deep",
+  "description": "Extends the pitch search down to Game Boy hardware limits and reduces rumble.",
+  "type": "profile",
+  "options": {
+    "minHz": 64,
+    "maxHz": 800,
+    "noisePitch": 92,
+    "noiseGain": 0.8,
+    "secondGain": 0.75,
+    "noiseMode": "texture"
+  }
+}

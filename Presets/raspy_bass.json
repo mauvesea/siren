@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "raspy_bass",
+  "name": "Raspy Bass",
+  "description": "Keeps a deep tonal base while preserving strong crunchy upper texture.",
+  "type": "profile",
+  "options": {
+    "minHz": 64,
+    "maxHz": 1400,
+    "stepFrames": 2,
+    "noisePitch": 44,
+    "noiseGain": 2.2,
+    "secondGain": 0.65,
+    "noiseMode": "texture"
+  }
+}

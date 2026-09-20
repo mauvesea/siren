@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "forcing",
+  "name": "Forcing",
+  "description": "Tests every shared profile and fine-tunes its noise settings against this WAV. This takes longer.",
+  "type": "forcing",
+  "search": {
+    "noiseGainFactors": [0, 0.5, 1.5, 2.5],
+    "noisePitches": [44, 75, 92]
+  }
+}

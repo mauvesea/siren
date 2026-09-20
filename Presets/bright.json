@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "bright",
+  "name": "Bright",
+  "description": "Searches higher pitches and keeps the tonal voices prominent.",
+  "type": "profile",
+  "options": {
+    "minHz": 150,
+    "maxHz": 1800,
+    "noisePitch": 44,
+    "noiseGain": 0.7,
+    "secondGain": 0.85,
+    "noiseMode": "texture"
+  }
+}

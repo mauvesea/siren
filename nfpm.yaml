@@ -1,0 +1,51 @@
+name: siren
+arch: amd64
+platform: linux
+version: 1.0.0
+release: 1
+section: sound
+priority: optional
+maintainer: Mauvesea <mauvesea@users.noreply.github.com>
+description: Native GNOME tool for converting WAV audio into pokecrystal cries
+homepage: https://github.com/mauvesea/pokecry
+license: MIT
+
+contents:
+  - src: ./siren
+    dst: /usr/bin/siren
+    file_info:
+      mode: 0755
+  - src: ./src/
+    dst: /usr/lib/siren
+    type: tree
+  - src: ./Presets/
+    dst: /usr/share/siren/Presets
+    type: tree
+  - src: ./data/io.github.mauvesea.Siren.desktop
+    dst: /usr/share/applications/io.github.mauvesea.Siren.desktop
+  - src: ./data/io.github.mauvesea.Siren.svg
+    dst: /usr/share/icons/hicolor/scalable/apps/io.github.mauvesea.Siren.svg
+  - src: ./data/io.github.mauvesea.Siren-symbolic.svg
+    dst: /usr/share/icons/hicolor/symbolic/apps/io.github.mauvesea.Siren-symbolic.svg
+  - src: ./data/io.github.mauvesea.Siren.metainfo.xml
+    dst: /usr/share/metainfo/io.github.mauvesea.Siren.metainfo.xml
+
+overrides:
+  deb:
+    depends:
+      - gjs
+      - gir1.2-adw-1
+      - gir1.2-gtk-4.0
+      - gir1.2-gstreamer-1.0
+      - gstreamer1.0-plugins-base
+      - gstreamer1.0-plugins-good
+      - librsvg2-common
+  rpm:
+    depends:
+      - gjs
+      - gtk4
+      - libadwaita
+      - gstreamer1
+      - gstreamer1-plugins-base
+      - gstreamer1-plugins-good
+      - librsvg2

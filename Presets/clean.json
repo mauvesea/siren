@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "clean",
+  "name": "Clean",
+  "description": "Clear mid-range conversion with source-dependent, restrained noise.",
+  "type": "profile",
+  "options": {
+    "noisePitch": 75,
+    "noiseGain": 0.9,
+    "noiseMode": "texture"
+  }
+}

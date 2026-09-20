@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "noisy",
+  "name": "Noisy",
+  "description": "The previous Default settings, retained for cries whose stronger noise already worked.",
+  "type": "profile",
+  "options": {
+    "noisePitch": 75,
+    "noiseGain": 3
+  }
+}

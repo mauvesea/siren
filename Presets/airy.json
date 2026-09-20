@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "airy",
+  "name": "Airy",
+  "description": "A light, high-register profile with an audible but source-dependent breathy layer.",
+  "type": "profile",
+  "options": {
+    "minHz": 120,
+    "maxHz": 1800,
+    "noisePitch": 44,
+    "noiseGain": 1.2,
+    "secondGain": 0.85,
+    "noiseMode": "texture"
+  }
+}

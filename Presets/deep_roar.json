@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "deep_roar",
+  "name": "Deep Roar",
+  "description": "A slower low-register profile for broad, sustained roars with source-dependent grain.",
+  "type": "profile",
+  "options": {
+    "minHz": 64,
+    "maxHz": 1250,
+    "stepFrames": 2,
+    "noisePitch": 75,
+    "noiseGain": 3,
+    "secondGain": 0.7,
+    "noiseMode": "texture"
+  }
+}

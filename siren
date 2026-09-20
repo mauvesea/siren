@@ -1,0 +1,24 @@
+#!/bin/sh
+set -eu
+
+launcher_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+
+if [ -n "${APPIMAGE:-}" ]; then
+    external_presets=$(dirname -- "$APPIMAGE")/Presets
+    bundled_presets=${APPDIR}/usr/share/siren/Presets
+    if [ -d "$external_presets" ]; then
+        SIREN_PRESETS_DIRS=$bundled_presets:$external_presets
+    else
+        SIREN_PRESETS_DIRS=$bundled_presets
+    fi
+    SIREN_LIB_DIR=${APPDIR}/usr/lib/siren
+elif [ -f "$launcher_dir/src/main.js" ]; then
+    SIREN_PRESETS_DIRS=${SIREN_PRESETS_DIRS:-${SIREN_PRESETS_DIR:-$launcher_dir/Presets}}
+    SIREN_LIB_DIR=$launcher_dir/src
+else
+    SIREN_PRESETS_DIRS=${SIREN_PRESETS_DIRS:-${SIREN_PRESETS_DIR:-/usr/share/siren/Presets}}
+    SIREN_LIB_DIR=${SIREN_LIB_DIR:-/usr/lib/siren}
+fi
+
+export SIREN_PRESETS_DIRS
+exec gjs -m "$SIREN_LIB_DIR/main.js" "$@"

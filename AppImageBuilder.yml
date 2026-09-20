@@ -1,0 +1,56 @@
+version: 1
+
+script:
+  - install -d SirenAppDir/usr/bin SirenAppDir/usr/lib/siren SirenAppDir/usr/share/siren/Presets
+  - install -d SirenAppDir/usr/share/applications SirenAppDir/usr/share/icons/hicolor/scalable/apps SirenAppDir/usr/share/icons/hicolor/symbolic/apps SirenAppDir/usr/share/metainfo
+  - install -m 0755 siren SirenAppDir/usr/bin/siren
+  - install -m 0644 src/*.js SirenAppDir/usr/lib/siren/
+  - install -m 0644 Presets/*.json Presets/README.md SirenAppDir/usr/share/siren/Presets/
+  - install -m 0644 data/io.github.mauvesea.Siren.desktop SirenAppDir/usr/share/applications/
+  - install -m 0644 data/io.github.mauvesea.Siren.svg SirenAppDir/usr/share/icons/hicolor/scalable/apps/
+  - install -m 0644 data/io.github.mauvesea.Siren-symbolic.svg SirenAppDir/usr/share/icons/hicolor/symbolic/apps/
+  - install -m 0644 data/io.github.mauvesea.Siren.metainfo.xml SirenAppDir/usr/share/metainfo/
+  - install -m 0644 data/io.github.mauvesea.Siren.metainfo.xml SirenAppDir/usr/share/metainfo/io.github.mauvesea.Siren.appdata.xml
+
+AppDir:
+  path: ./SirenAppDir
+  app_info:
+    id: io.github.mauvesea.Siren
+    name: Siren
+    icon: io.github.mauvesea.Siren
+    version: 1.0.0
+    exec: usr/bin/gjs
+    exec_args: -m $APPDIR/usr/lib/siren/main.js $@
+  apt:
+    arch:
+      - amd64
+    sources:
+      - sourceline: deb [arch=amd64] http://archive.ubuntu.com/ubuntu/ noble main universe
+        key_url: https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x871920D1991BC93C
+      - sourceline: deb [arch=amd64] http://archive.ubuntu.com/ubuntu/ noble-updates main universe
+    include:
+      - gjs
+      - gir1.2-adw-1
+      - gir1.2-gtk-4.0
+      - gir1.2-gstreamer-1.0
+      - gstreamer1.0-plugins-base
+      - gstreamer1.0-plugins-good
+      - libadwaita-1-0
+      - librsvg2-common
+    exclude:
+      - humanity-icon-theme
+      - ubuntu-mono
+  files:
+    exclude:
+      - usr/share/doc
+      - usr/share/man
+      - usr/share/lintian
+      - usr/share/locale
+  runtime:
+    env:
+      GDK_BACKEND: wayland,x11
+      GSETTINGS_SCHEMA_DIR: '${APPDIR}/usr/share/glib-2.0/schemas'
+      GI_TYPELIB_PATH: '$APPDIR/usr/lib/x86_64-linux-gnu/girepository-1.0:$APPDIR/usr/lib/x86_64-linux-gnu/gjs/girepository-1.0'
+
+AppImage:
+  arch: x86_64

@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "hollow_bass",
+  "name": "Hollow Bass",
+  "description": "Restricts the tonal search to low resonances and adds a controlled hollow noise layer.",
+  "type": "profile",
+  "options": {
+    "minHz": 64,
+    "maxHz": 700,
+    "stepFrames": 2,
+    "noisePitch": 75,
+    "noiseGain": 1.8,
+    "secondGain": 0.7,
+    "noiseMode": "texture"
+  }
+}

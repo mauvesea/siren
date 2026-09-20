@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.mauvesea.Siren</id>
+  <name>Siren</name>
+  <summary>Turn WAV audio into pokecrystal cries</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <developer id="io.github.mauvesea">
+    <name>Mauvesea</name>
+  </developer>
+  <url type="homepage">https://github.com/mauvesea/pokecry</url>
+  <description>
+    <p>
+      Siren prepares a WAV, selects an appropriate conversion preset, and
+      converts it into a three-channel Game Boy cry for pokecrystal. Compare
+      the original and converted sound, try other presets, then export ASM
+      beside the source recording.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.mauvesea.Siren.desktop</launchable>
+  <provides>
+    <binary>siren</binary>
+  </provides>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="1.0.0" date="2026-09-20"/>
+  </releases>
+</component>

@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "deep_vibrating",
+  "name": "Deep Vibrating",
+  "description": "Keeps fast pitch movement while extending the search down to 64 Hz.",
+  "type": "profile",
+  "options": {
+    "minHz": 64,
+    "maxHz": 950,
+    "stepFrames": 1,
+    "noisePitch": 75,
+    "noiseGain": 0.65,
+    "secondGain": 0.75,
+    "noiseMode": "texture"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "textured",
+  "name": "Textured",
+  "description": "Uses the source spectrum to add noise only where the cry is noisy.",
+  "type": "profile",
+  "options": {
+    "minHz": 90,
+    "maxHz": 1800,
+    "noisePitch": 44,
+    "noiseGain": 1.7,
+    "secondGain": 0.65,
+    "noiseMode": "texture"
+  }
+}
