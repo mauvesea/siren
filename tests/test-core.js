@@ -2,7 +2,7 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
 import { convert, encodeWav, makeAsm, prepareWav, readWav } from '../src/converter.js';
-import { fitForcingPreset, suggestPreset } from '../src/preset-engine.js';
+import { fitAutoPreset, suggestPreset } from '../src/preset-engine.js';
 import { loadPresets } from '../src/preset-loader.js';
 import { renderPreview } from '../src/preview.js';
 
@@ -13,7 +13,7 @@ function assert(condition, message) {
 const root = GLib.get_current_dir();
 const presets = loadPresets(GLib.build_filenamev([root, 'Presets']));
 const profiles = presets.filter(preset => preset.type === 'profile');
-const forcing = presets.find(preset => preset.type === 'forcing');
+const autoPreset = presets.find(preset => preset.type === 'auto');
 
 assert(presets.length === 19, 'Expected all 19 presets.');
 assert(profiles.length === 18, 'Expected 18 fixed conversion profiles.');
@@ -23,11 +23,11 @@ assert(presets.find(preset => preset.id === 'clean')?.name === 'Clean',
   'The former Default preset must be called Clean.');
 assert(['airy', 'percussive', 'pure_tone'].every(id => profiles.some(preset => preset.id === id)),
   'Expected the three new profile presets.');
-assert(Boolean(forcing), 'Expected the Forcing preset.');
-assert(JSON.stringify(forcing.search.noiseGainFactors) === JSON.stringify([0, 0.5, 1.5, 2.5]),
-  'Forcing noise gain search changed.');
-assert(JSON.stringify(forcing.search.noisePitches) === JSON.stringify([44, 75, 92]),
-  'Forcing noise pitch search changed.');
+assert(Boolean(autoPreset), 'Expected the Auto preset.');
+assert(JSON.stringify(autoPreset.search.noiseGainFactors) === JSON.stringify([0, 0.5, 1.5, 2.5]),
+  'Auto noise gain search changed.');
+assert(JSON.stringify(autoPreset.search.noisePitches) === JSON.stringify([44, 75, 92]),
+  'Auto noise pitch search changed.');
 
 const rate = 10512;
 const samples = Float64Array.from({ length: 17 * 176 }, (_, i) => {
@@ -57,10 +57,10 @@ assert(suggestPreset(tone(120)).id !== suggestPreset(tone(1400)).id,
   'Automatic recommendation should respond to the WAV spectrum.');
 
 const shortSamples = samples.subarray(0, 5 * 176);
-const fitted = fitForcingPreset(shortSamples, profiles, forcing);
-assert(Number.isFinite(fitted.score), 'Forcing did not produce a finite match score.');
-assert(profiles.some(preset => preset.id === fitted.basis), 'Forcing chose an unknown profile.');
-assert(readWav(renderPreview(fitted.result)).rate === 44100, 'Forcing preview is not playable.');
+const fitted = fitAutoPreset(shortSamples, profiles, autoPreset);
+assert(Number.isFinite(fitted.score), 'Auto did not produce a finite match score.');
+assert(profiles.some(preset => preset.id === fitted.basis), 'Auto chose an unknown profile.');
+assert(readWav(renderPreview(fitted.result)).rate === 44100, 'Auto preview is not playable.');
 
 const testDirectory = Gio.File.new_for_path(GLib.dir_make_tmp('siren-presets-test-XXXXXX'));
 const testFile = testDirectory.get_child('test.json');

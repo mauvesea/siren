@@ -16,8 +16,9 @@ Supported profile options:
 - `noiseMode`: `"fixed"` or source-dependent `"texture"`.
 - `smoothing`: `"legacy"` or `"none"`.
 
-`forcing.json` preserves the former “Force unique preset” search. It is a
-special preset and should remain the only file with `"type": "forcing"`.
+`auto.json` searches the available profiles and adjusts noise settings for the
+selected WAV. It is a special preset and should remain the only file with
+`"type": "auto"`.
 
 The `id` and `name` must be at most 32 characters; `description` at most 255;
 `type` and `noiseMode` at most 32; and all other parameter names or string

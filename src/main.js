@@ -9,7 +9,7 @@ import Gst from 'gi://Gst?version=1.0';
 import Gtk from 'gi://Gtk?version=4.0';
 
 import { MAX_BYTES, MAX_SECONDS, makeAsm, prepareWav, readWav, suggestedLabel, convert } from './converter.js';
-import { fitForcingPreset, suggestPreset } from './preset-engine.js';
+import { fitAutoPreset, suggestPreset } from './preset-engine.js';
 import { loadPresetDirectories } from './preset-loader.js';
 import { renderPreview } from './preview.js';
 
@@ -335,14 +335,14 @@ class SirenWindow {
   beginConversion(preset) {
     const serial = ++this.conversionSerial;
     this.convertedPlayer.stop();
-    this.setBusy(true, preset.type === 'forcing' ? 'Testing conversion profiles…' : 'Converting…');
+    this.setBusy(true, preset.type === 'auto' ? 'Testing conversion profiles…' : 'Converting…');
     GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
       if (serial !== this.conversionSerial) return GLib.SOURCE_REMOVE;
       try {
         let result;
         let detail = preset.name;
-        if (preset.type === 'forcing') {
-          const fitted = fitForcingPreset(this.preparedSamples, this.profilePresets, preset,
+        if (preset.type === 'auto') {
+          const fitted = fitAutoPreset(this.preparedSamples, this.profilePresets, preset,
             (current, total) => { this.convertedRow.subtitle = `Testing profile ${current} of ${total}…`; });
           result = fitted.result;
           const basis = this.presets.find(item => item.id === fitted.basis);

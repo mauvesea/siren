@@ -6,8 +6,8 @@ release: 1
 section: sound
 priority: optional
 maintainer: Mauvesea <mauvesea@users.noreply.github.com>
-description: Native GNOME tool for converting WAV audio into pokecrystal cries
-homepage: https://github.com/mauvesea/pokecry
+description: Tool for converting .wav files into pret's pokecrystal compatible .asm files.
+homepage: https://github.com/mauvesea/siren
 license: MIT
 
 contents:

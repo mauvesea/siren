@@ -52,11 +52,11 @@ function renderDifference(samples, reference, options) {
   return { result, score: difference(reference, signature(prepared.samples)) };
 }
 
-export function fitForcingPreset(samples, profiles, forcing, onProgress = () => {}) {
+export function fitAutoPreset(samples, profiles, autoPreset, onProgress = () => {}) {
   const reference = signature(samples);
   let best = null;
   let tried = 0;
-  const total = profiles.length + forcing.search.noiseGainFactors.length + forcing.search.noisePitches.length;
+  const total = profiles.length + autoPreset.search.noiseGainFactors.length + autoPreset.search.noisePitches.length;
   const tryOptions = (options, basis) => {
     const candidate = renderDifference(samples, reference, options);
     tried++;
@@ -65,9 +65,9 @@ export function fitForcingPreset(samples, profiles, forcing, onProgress = () => 
   };
   for (const preset of profiles) tryOptions(preset.options, preset.id);
   const seed = { ...best.options };
-  for (const factor of forcing.search.noiseGainFactors)
+  for (const factor of autoPreset.search.noiseGainFactors)
     tryOptions({ ...seed, noiseGain: Math.min(4, seed.noiseGain * factor) }, best.basis);
-  for (const noisePitch of forcing.search.noisePitches)
+  for (const noisePitch of autoPreset.search.noisePitches)
     tryOptions({ ...seed, noisePitch }, best.basis);
   return best;
 }

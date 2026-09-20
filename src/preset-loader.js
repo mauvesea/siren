@@ -53,13 +53,13 @@ function validateProfile(preset, filename) {
     throw new Error(`${filename}: minHz cannot exceed maxHz.`);
 }
 
-function validateForcing(preset, filename) {
+function validateAuto(preset, filename) {
   if (!preset.search || !Array.isArray(preset.search.noiseGainFactors) ||
       !Array.isArray(preset.search.noisePitches))
-    throw new Error(`${filename}: the Forcing preset needs both search arrays.`);
+    throw new Error(`${filename}: the Auto preset needs both search arrays.`);
   for (const key of Object.keys(preset.search))
     if (key.length > 16 || !['noiseGainFactors', 'noisePitches'].includes(key))
-      throw new Error(`${filename}: unknown Forcing parameter “${key}”.`);
+      throw new Error(`${filename}: unknown Auto parameter “${key}”.`);
   for (const [key, values, high] of [
     ['noiseGainFactors', preset.search.noiseGainFactors, 8],
     ['noisePitches', preset.search.noisePitches, 255],
@@ -88,10 +88,10 @@ function validatePreset(preset, filename) {
   if (preset.schemaVersion !== undefined && preset.schemaVersion !== 1)
     throw new Error(`${filename}: schemaVersion must be 1.`);
   if (preset.order !== undefined) boundedNumber(preset.order, 'order', filename, 0, 10000);
-  if (!['profile', 'forcing'].includes(preset.type))
-    throw new Error(`${filename}: type must be “profile” or “forcing”.`);
+  if (!['profile', 'auto'].includes(preset.type))
+    throw new Error(`${filename}: type must be “profile” or “auto”.`);
   if (preset.type === 'profile') validateProfile(preset, filename);
-  else validateForcing(preset, filename);
+  else validateAuto(preset, filename);
   return preset;
 }
 
