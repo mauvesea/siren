@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src blob: file:; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Siren</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="titlebar" aria-hidden="true">
+    <img src="../data/io.github.mauvesea.Siren.svg" alt="" draggable="false">
+    <span>Siren</span>
+  </div>
+
+  <div class="window-layout">
+    <nav class="navigation" aria-label="Main navigation">
+      <div class="brand">
+        <img src="../data/io.github.mauvesea.Siren.svg" alt="" draggable="false">
+        <div><strong>Siren</strong><span>Pokémon cry studio</span></div>
+      </div>
+      <div class="nav-items">
+        <button class="nav-item selected" type="button" data-page="converter" aria-current="page">
+          <span class="fluent-icon" aria-hidden="true">&#xE8D6;</span><span>File converter</span>
+        </button>
+        <button class="nav-item" type="button" data-page="validation">
+          <span class="fluent-icon" aria-hidden="true">&#xE9D2;</span><span>Parameter validation</span>
+        </button>
+      </div>
+      <div class="nav-footer">
+        <button class="nav-item" id="new-window-button" type="button">
+          <span class="fluent-icon" aria-hidden="true">&#xE78B;</span><span>New window</span>
+        </button>
+        <button class="nav-item" id="about-button" type="button">
+          <span class="fluent-icon" aria-hidden="true">&#xE946;</span><span>About Siren</span>
+        </button>
+      </div>
+    </nav>
+
+    <main class="content" id="main-content">
+      <section class="page active" id="converter-page" aria-labelledby="converter-title">
+        <header class="page-header">
+          <div>
+            <h1 id="converter-title">File converter</h1>
+            <p>Shape a WAV recording into three Game Boy sound channels.</p>
+          </div>
+          <button class="icon-button" id="converter-open-header" type="button" title="Open WAV" aria-label="Open WAV">
+            <span class="fluent-icon" aria-hidden="true">&#xE8E5;</span>
+          </button>
+        </header>
+
+        <div id="converter-empty" class="hero-card drop-surface">
+          <div class="hero-icon"><span class="fluent-icon" aria-hidden="true">&#xE8D6;</span></div>
+          <h2>Select a WAV</h2>
+          <p>Choose or drop an uncompressed WAV up to 20 MB and 5 seconds long.</p>
+          <button class="accent-button" id="converter-open" type="button">
+            <span class="fluent-icon" aria-hidden="true">&#xE8E5;</span> Open WAV
+          </button>
+        </div>
+
+        <div id="converter-content" class="sections" hidden>
+          <section class="settings-section" aria-labelledby="source-heading">
+            <h2 id="source-heading">Source</h2>
+            <div class="settings-card">
+              <div class="settings-row">
+                <div class="row-icon"><span class="fluent-icon" aria-hidden="true">&#xE8D6;</span></div>
+                <div class="row-copy"><strong id="source-name">WAV</strong><span id="source-detail"></span></div>
+                <button class="standard-button" id="converter-change" type="button">Change…</button>
+              </div>
+            </div>
+          </section>
+
+          <section class="settings-section" aria-labelledby="conversion-heading">
+            <h2 id="conversion-heading">Conversion</h2>
+            <p class="section-description">The recommended preset is selected automatically. Switch it at any time to compare results.</p>
+            <div class="settings-card">
+              <label class="settings-row" for="preset-select">
+                <div class="row-icon"><span class="fluent-icon" aria-hidden="true">&#xE9E9;</span></div>
+                <div class="row-copy"><strong>Preset</strong><span id="preset-detail"></span></div>
+                <select id="preset-select"></select>
+              </label>
+            </div>
+          </section>
+
+          <section class="settings-section" aria-labelledby="sound-heading">
+            <h2 id="sound-heading">Sound check</h2>
+            <p class="section-description">Compare the original recording with the synthesized Game Boy channels.</p>
+            <div class="settings-card">
+              <div class="settings-row">
+                <div class="row-icon"><span class="fluent-icon" aria-hidden="true">&#xE995;</span></div>
+                <div class="row-copy"><strong>Original WAV</strong><span id="original-detail"></span></div>
+                <button class="play-button" id="original-play" type="button" disabled aria-label="Play original WAV">
+                  <span class="fluent-icon" aria-hidden="true">&#xE768;</span>
+                </button>
+              </div>
+              <div class="settings-row">
+                <div class="row-icon"><span class="fluent-icon" aria-hidden="true">&#xE995;</span></div>
+                <div class="row-copy"><strong>Converted cry</strong><span id="converted-detail">Waiting for a WAV</span></div>
+                <span class="progress-ring" id="conversion-progress" hidden aria-label="Converting"></span>
+                <button class="play-button" id="converted-play" type="button" disabled aria-label="Play converted cry">
+                  <span class="fluent-icon" aria-hidden="true">&#xE768;</span>
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <button class="accent-button export-button" id="export-button" type="button" disabled>
+            <span class="fluent-icon" aria-hidden="true">&#xE74E;</span> Export ASM
+          </button>
+        </div>
+      </section>
+
+      <section class="page" id="validation-page" aria-labelledby="validation-title" hidden>
+        <header class="page-header">
+          <div>
+            <h1 id="validation-title">Parameter validation</h1>
+            <p>Audition a pokecrystal cry with production pitch and length values.</p>
+          </div>
+          <button class="icon-button" id="validation-open-header" type="button" title="Open cry ASM" aria-label="Open cry ASM">
+            <span class="fluent-icon" aria-hidden="true">&#xE8E5;</span>
+          </button>
+        </header>
+
+        <div class="sections drop-surface">
+          <section class="settings-section" aria-labelledby="cry-heading">
+            <h2 id="cry-heading">Cry ASM</h2>
+            <div class="settings-card">
+              <div class="settings-row">
+                <div class="row-icon"><span class="fluent-icon" aria-hidden="true">&#xE8A5;</span></div>
+                <div class="row-copy"><strong id="asm-name">Select a cry</strong><span id="asm-detail">Open or drop a pokecrystal cry .asm file.</span></div>
+                <button class="standard-button" id="validation-open" type="button">Open…</button>
+              </div>
+              <label class="settings-row" id="cry-choice-row" for="cry-choice" hidden>
+                <div class="row-icon"><span class="fluent-icon" aria-hidden="true">&#xE8D6;</span></div>
+                <div class="row-copy"><strong>Cry</strong><span>Choose a header from this file</span></div>
+                <select id="cry-choice"></select>
+              </label>
+            </div>
+          </section>
+
+          <section class="settings-section" aria-labelledby="parameters-heading">
+            <h2 id="parameters-heading">Parameters</h2>
+            <p class="section-description">Uses pokecrystal’s signed pitch offset and 16-bit length value. Length 256 is the default tempo.</p>
+            <div class="settings-card">
+              <label class="settings-row" for="pitch-input">
+                <div class="row-icon"><span class="fluent-icon" aria-hidden="true">&#xE9D9;</span></div>
+                <div class="row-copy"><strong>Pitch</strong><span>Frequency offset · −32768 to 32767</span></div>
+                <input id="pitch-input" type="number" value="0" min="-32768" max="32767" step="1">
+              </label>
+              <label class="settings-row" for="length-input">
+                <div class="row-icon"><span class="fluent-icon" aria-hidden="true">&#xE916;</span></div>
+                <div class="row-copy"><strong>Length</strong><span>Tempo value · 0 to 65535</span></div>
+                <input id="length-input" type="number" value="256" min="0" max="65535" step="1">
+              </label>
+            </div>
+          </section>
+
+          <section class="settings-section" aria-labelledby="validation-sound-heading">
+            <h2 id="validation-sound-heading">Sound check</h2>
+            <p class="section-description">Changes apply immediately and restart the preview when it is playing.</p>
+            <div class="settings-card">
+              <div class="settings-row">
+                <div class="row-icon"><span class="fluent-icon" aria-hidden="true">&#xE995;</span></div>
+                <div class="row-copy"><strong>Cry preview</strong><span id="validation-detail">Open a cry to begin</span></div>
+                <span class="progress-ring" id="validation-progress" hidden aria-label="Rendering"></span>
+                <button class="play-button" id="validation-play" type="button" disabled aria-label="Play cry preview">
+                  <span class="fluent-icon" aria-hidden="true">&#xE768;</span>
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="drop-overlay" id="drop-overlay" hidden><div><span class="fluent-icon">&#xE898;</span><strong>Drop to open</strong></div></div>
+  <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
+
+  <dialog id="about-dialog" class="fluent-dialog">
+    <form method="dialog">
+      <div class="dialog-hero"><img src="../data/io.github.mauvesea.Siren.svg" alt=""><div><h2>About Siren</h2><p>Version 1.0.0</p></div></div>
+      <p>Convert WAV audio and audition pokecrystal cry parameters.</p>
+      <div class="dialog-links">
+        <button type="button" data-url="https://github.com/mauvesea/pokecry">Repository</button>
+        <button type="button" data-url="https://github.com/mauvesea/pokecry/issues/new">Report an issue</button>
+      </div>
+      <div class="dialog-actions">
+        <button class="standard-button" value="close">Close</button>
+      </div>
+    </form>
+  </dialog>
+
+  <audio id="original-audio"></audio>
+  <audio id="converted-audio"></audio>
+  <audio id="validation-audio"></audio>
+  <script type="module" src="renderer.js"></script>
+</body>
+</html>

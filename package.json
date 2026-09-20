@@ -1,0 +1,65 @@
+{
+  "name": "siren",
+  "version": "1.0.0",
+  "description": "Convert WAV recordings into pokecrystal cries and audition cry parameters.",
+  "author": "Mauvesea",
+  "homepage": "https://github.com/mauvesea/pokecry",
+  "private": true,
+  "type": "module",
+  "main": "windows/main.mjs",
+  "scripts": {
+    "windows": "electron .",
+    "windows:dir": "electron-builder --win --dir --x64 --arm64",
+    "windows:pack": "electron-builder --win",
+    "windows:installer": "electron-builder --win nsis --x64 --arm64",
+    "test:windows": "node --test tests/windows/*.test.mjs"
+  },
+  "devDependencies": {
+    "electron": "^44.4.3",
+    "electron-builder": "^26.16.1"
+  },
+  "build": {
+    "appId": "io.github.mauvesea.Siren",
+    "productName": "Siren",
+    "artifactName": "Siren-${version}.${ext}",
+    "asar": true,
+    "files": [
+      "windows/**/*",
+      "data/io.github.mauvesea.Siren.svg",
+      "src/converter.js",
+      "src/cry-asm.js",
+      "src/preset-engine.js",
+      "src/preview.js",
+      "Presets/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "icon": "windows/assets/Siren.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "fileAssociations": [
+      {
+        "ext": "wav",
+        "name": "WAV audio",
+        "role": "Viewer"
+      },
+      {
+        "ext": "asm",
+        "name": "pokecrystal cry ASM",
+        "role": "Viewer"
+      }
+    ]
+  }
+}
