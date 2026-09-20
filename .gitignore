@@ -1,5 +1,7 @@
 appimage-builder-cache/
 SirenAppDir/
+node_modules/
+dist/
 *.deb
 *.AppImage
 *.rpm
