@@ -5,6 +5,8 @@ for [pokecrystal](https://github.com/pret/pokecrystal). It uses two Game Boy
 square-wave channels (5 and 6) and one noise channel (8). Generated cries are
 intended for **pitch 0** and **length 256**.
 
+This tool is AI assisted.
+
 ## Using the app
 
 Open Siren and choose or drop a WAV. The application prepares the audio
@@ -33,8 +35,8 @@ playback plugins. On Fedora these are normally provided by `gjs`, `gtk4`,
 
 ## Presets
 
-Every profile is a readable JSON file in [`Presets`](Presets), including
-**Auto**, which preserves the former unique-preset search. The menu sorts
+Every profile is a readable JSON file in [`Presets`](Presets). The **Auto**
+preset searches the available profiles for a close match. The menu sorts
 presets alphabetically by `id`.
 
 See [`Presets/README.md`](Presets/README.md) for fields and limits. In a source
@@ -73,7 +75,7 @@ make test
 ```
 
 The GJS test covers preset loading and validation, automatic selection,
-conversion, Forcing, ASM generation, and preview synthesis.
+conversion, Auto, ASM generation, and preview synthesis.
 
 ## Adding generated ASM to pokecrystal
 

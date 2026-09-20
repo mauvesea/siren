@@ -88,10 +88,7 @@ class AudioPlayer {
 
 class SirenWindow {
   constructor(application, menuModel) {
-    this.application = application;
     this.sourceFile = null;
-    this.source = null;
-    this.prepared = null;
     this.project = null;
     this.previewFile = null;
     this.conversionSerial = 0;
@@ -304,8 +301,6 @@ class SirenWindow {
       this.originalPlayer.stop();
       this.convertedPlayer.stop();
       this.sourceFile = file;
-      this.source = source;
-      this.prepared = prepared;
       this.preparedSamples = preparedSamples;
       this.project = null;
       this.fileRow.title = file.get_basename();
@@ -314,7 +309,7 @@ class SirenWindow {
       this.originalPlayer.setUri(file.get_uri());
       this.stack.visible_child_name = 'content';
 
-      const suggestion = suggestPreset(preparedSamples, file.get_basename());
+      const suggestion = suggestPreset(preparedSamples);
       let selected = this.presets.findIndex(preset => preset.id === suggestion.id);
       if (selected < 0) selected = this.presets.findIndex(preset => preset.type === 'profile');
       this.ignorePresetChanges = true;

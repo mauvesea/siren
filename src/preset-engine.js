@@ -1,31 +1,8 @@
 import { analyzeWaveform, convert, prepareWav, readWav, waveformWindow } from './converter.js';
 import { renderPreview } from './preview.js';
 
-const GEN3_AUTO = {
-  noisy: ['absol', 'aggron', 'armaldo', 'cacnea', 'combusken', 'electrike', 'glalie', 'lairon', 'lunatone', 'makuhita', 'rayquaza', 'torchic', 'wingull', 'wurmple'],
-  clean: ['breloom', 'delcatty', 'deoxys', 'gulpin', 'latias', 'medicham', 'milotic', 'salamence', 'sealeo', 'shedinja', 'shelgon', 'spheal', 'swalot', 'trapinch', 'volbeat', 'wailmer', 'wailord', 'walrein', 'wynaut', 'zigzagoon'],
-  deep_default: ['claydol', 'cradily', 'exploud', 'metagross', 'metang'],
-  deep: ['blaziken', 'dusclops', 'feebas', 'silcoon'],
-  deep_noisy: ['cascoon'],
-  bass_vibrato: ['camerupt', 'groudon', 'hariyama', 'kyogre', 'manectric', 'regirock', 'sceptile', 'slaking', 'swampert', 'whiscash'],
-  deep_roar: ['latios', 'marshtomp', 'mightyena', 'pelipper', 'tropius'],
-  raspy_bass: ['grovyle', 'mudkip'],
-  hollow_bass: ['barboach', 'kecleon', 'relicanth'],
-  vibrating: ['altaria', 'bagon', 'beautifly', 'clamperl', 'duskull', 'dustox', 'illumise', 'kirlia', 'lileep', 'luvdisc', 'masquerain', 'meditite', 'nosepass', 'ralts', 'regice', 'shuppet', 'snorunt', 'spinda', 'spoink'],
-  deep_vibrating: ['cacturne', 'castform', 'crawdaunt', 'gardevoir', 'huntail', 'linoone', 'loudred', 'mawile', 'numel', 'poochyena', 'sharpedo', 'solrock', 'swellow', 'vibrava', 'whismur'],
-  bright: ['anorith', 'aron', 'azurill', 'chimecho', 'jirachi', 'minun', 'roselia', 'shroomish', 'skitty', 'swablu', 'taillow'],
-  deep_bright: ['baltoy', 'banette', 'beldum', 'corphish', 'gorebyss', 'lombre', 'ludicolo', 'nuzleaf', 'plusle', 'sableye', 'seedot', 'shiftry', 'slakoth', 'vigoroth', 'zangoose'],
-  textured: ['lotad', 'nincada', 'ninjask', 'torkoal'],
-  deep_textured: ['carvanha', 'flygon', 'grumpig', 'registeel', 'seviper', 'surskit', 'treecko'],
-};
-
-const GEN3_LOOKUP = new Map(Object.entries(GEN3_AUTO)
-  .flatMap(([id, names]) => names.map(name => [name, id])));
-
-export function suggestPreset(samples, filename = '') {
+export function suggestPreset(samples) {
   const features = analyzeWaveform(samples);
-  const name = filename.toLowerCase().replace(/\.wav$/i, '').replace(/[^a-z0-9]/g, '');
-  if (GEN3_LOOKUP.has(name)) return { id: GEN3_LOOKUP.get(name), features };
   let id = 'clean';
   if (features.peakHz < 240 && features.pitchJitter > 0.18) id = 'bass_vibrato';
   else if (features.peakHz < 240 && features.flatness > 0.12) id = 'raspy_bass';

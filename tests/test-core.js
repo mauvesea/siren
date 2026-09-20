@@ -46,10 +46,15 @@ assert(project.channels.ch8.length === 9, 'Noise channel note count changed.');
 assert(makeAsm(project, 'two_tones.wav').includes('Cry_TwoTones_Ch8:'), 'ASM output is incomplete.');
 assert(readWav(renderPreview(project)).rate === 44100, 'Preview sample rate changed.');
 
-assert(suggestPreset(source.samples, 'torchic.wav').id === 'noisy',
-  'Reviewed Gen 3 preset routing changed.');
-assert(suggestPreset(source.samples, 'breloom.wav').id === 'clean',
-  'The reviewed Clean routing changed.');
+const suggestion = suggestPreset(source.samples);
+assert(profiles.some(preset => preset.id === suggestion.id),
+  'Automatic recommendation should choose an available profile.');
+assert(Number.isFinite(suggestion.features.peakHz) && suggestion.features.peakHz > 0,
+  'Automatic recommendation should analyze the WAV samples.');
+const tone = hz => Float64Array.from({ length: 17 * 176 },
+  (_, i) => 0.5 * Math.sin(2 * Math.PI * hz * i / rate));
+assert(suggestPreset(tone(120)).id !== suggestPreset(tone(1400)).id,
+  'Automatic recommendation should respond to the WAV spectrum.');
 
 const shortSamples = samples.subarray(0, 5 * 176);
 const fitted = fitForcingPreset(shortSamples, profiles, forcing);
