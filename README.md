@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="data/io.github.mauvesea.Siren.svg" alt="Siren logo" width="256" height="256">
+</p>
+
 # Siren
 
 Siren is an application that turns a WAV into a three-channel cry
