@@ -1,10 +1,10 @@
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
-import { convert, encodeWav, makeAsm, prepareWav, readWav } from '../src/converter.js';
-import { fitAutoPreset, suggestPreset } from '../src/preset-engine.js';
-import { loadPresets } from '../src/preset-loader.js';
-import { renderPreview } from '../src/preview.js';
+import { convert, encodeWav, makeAsm, prepareWav, readWav } from '../../src/converter.js';
+import { fitAutoPreset, suggestPreset } from '../../src/preset-engine.js';
+import { loadPresets } from '../../src/preset-loader.js';
+import { renderPreview } from '../../src/preview.js';
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -95,4 +95,4 @@ try {
   testDirectory.delete(null);
 }
 
-print('Siren core tests passed.');
+print('Siren conversion workflow tests passed.');

@@ -74,8 +74,9 @@ and [nFPM](https://nfpm.goreleaser.com/) for DEB/RPM. The recipes are
 make test
 ```
 
-The GJS test covers preset loading and validation, automatic selection,
-conversion, Auto, ASM generation, and preview synthesis.
+The [GJS integration test](tests/integration/conversion-workflow.test.js)
+covers preset loading and validation, automatic selection, conversion, Auto,
+ASM generation, and preview synthesis.
 
 ## Adding generated ASM to pokecrystal
 

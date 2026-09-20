@@ -7,7 +7,7 @@ run:
 	./siren
 
 test:
-	gjs -m tests/test-core.js
+	gjs -m tests/integration/conversion-workflow.test.js
 	desktop-file-validate data/io.github.mauvesea.Siren.desktop
 
 appimage:
