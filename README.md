@@ -18,8 +18,17 @@ This tool is AI assisted.
 Select **File Converter** at the top of the window, then choose or drop a WAV.
 The application prepares the audio internally, recommends a preset, and
 synthesizes a converted sound. Listen to the original and converted versions
-in Sound Check, choose another preset to compare, then select **Export** to
+in Sound Check, choose another preset to compare, adjust **Volume**, and add
+an optional **Fade In** or **Fade Out**, then select **Export** to
 create an `.asm` file beside the source WAV.
+
+Siren detects the converted cry's loudest channel level and starts **Volume**
+there. The slider spans silence to the Game Boy hardware maximum; higher
+settings use any remaining channel headroom and cap at that limit. Fades use
+stock frame-aligned volume steps over the first or last 25%
+of the cry, so the exported ASM requires no engine changes. Because the wave
+channel exposes only full, half, quarter, and mute levels, its fades are
+necessarily coarser than the pulse and noise channels.
 
 The intermediate prepared WAV is hidden and the former note editor has been
 removed. Input stays on your computer. Siren accepts uncompressed PCM
@@ -119,7 +128,10 @@ To build only selected formats, pass one or more of `appimage`, `deb`, or `rpm`:
 ./build.sh appimage rpm
 ```
 
-`make`, `make appimage`, `make deb`, and `make rpm` are equivalent shortcuts.
+`make` builds all three Linux packages and the Windows portable executable.
+Use `make linux` to build only the Linux packages, or `make appimage`,
+`make deb`, and `make rpm` to build individual Linux formats. `make windows`
+builds only the Windows executable.
 The AppImage is self-contained and targets x86-64 Linux. DEB and RPM packages
 install Siren under `/usr` and depend on the distribution's native GTK,
 libadwaita, GJS, and GStreamer packages. Building requires Podman, or

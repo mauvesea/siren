@@ -1,7 +1,8 @@
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
-import { convert, encodeWav, makeAsm, makePlaybackWav, prepareWav, readWav } from '../../src/converter.js';
+import { applyConversionEffects, convert, encodeWav, makeAsm, makePlaybackWav, prepareWav, readWav } from '../../src/converter.js';
+import { parseCryAsm } from '../../src/cry-asm.js';
 import { fitAutoPreset, fitPrecisePreset, suggestPreset } from '../../src/preset-engine.js';
 import { loadPresets } from '../../src/preset-loader.js';
 import { renderPreview } from '../../src/preview.js';
@@ -81,6 +82,15 @@ assert(project.channels.ch6.length === 9, 'Secondary channel note count changed.
 assert(project.channels.ch8.length === 9, 'Noise channel note count changed.');
 assert(makeAsm(project, 'two_tones.wav').includes('Cry_TwoTones_Ch8:'), 'ASM output is incomplete.');
 assert(readWav(renderPreview(project)).rate === 44100, 'Preview sample rate changed.');
+const louder = applyConversionEffects(project, { volumePercent: 100 });
+assert(louder.channels.ch5.every((note, index) => note.volume >= project.channels.ch5[index].volume),
+  'Volume boost should not lower pulse notes.');
+const faded = applyConversionEffects(project, { fadeIn: true, fadeOut: true });
+assert(faded.channels.ch5[0].volume === 0 && faded.channels.ch5.at(-1).volume === 0,
+  'Fades should reach silence at both edges.');
+assert(faded.channels.ch5.reduce((sum, note) => sum + note.duration + 1, 0) === project.frames,
+  'Effects must preserve the cry duration.');
+parseCryAsm(makeAsm(faded, 'two_tones.wav'));
 
 const suggestion = suggestPreset(source.samples);
 assert(profiles.some(preset => preset.id === suggestion.id),

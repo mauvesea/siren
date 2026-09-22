@@ -1,6 +1,8 @@
-.PHONY: all run test windows windows-installer windows-dir windows-test appimage deb rpm clean
+.PHONY: all linux run test windows windows-installer windows-dir windows-test appimage deb rpm clean
 
-all:
+all: linux windows
+
+linux:
 	./build.sh
 
 run:

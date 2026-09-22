@@ -4,7 +4,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
-import { convert, encodeWav, makeAsm, prepareWav, readWav, suggestedLabel } from '../../src/converter.js';
+import { applyConversionEffects, convert, detectConversionVolume, encodeWav, makeAsm, prepareWav, readWav, suggestedLabel } from '../../src/converter.js';
 import { applyCryParameters, parseCryAsm } from '../../src/cry-asm.js';
 import { fitAutoPreset, suggestPreset } from '../../src/preset-engine.js';
 import { renderPreview } from '../../src/preview.js';
@@ -74,6 +74,29 @@ test('Windows uses the shared ASM parser and parameter semantics', () => {
   assert.equal(changed.channels.ch5[0].frames, 4);
   assert.equal(changed.channels.ch8[0].frames, 2);
   assert.equal(readWav(renderPreview(changed)).rate, 44100);
+});
+
+test('conversion volume and fades use pokecrystal-compatible note levels', () => {
+  const source = {
+    label: 'Effects', frames: 8,
+    channels: {
+      ch5: [{ duration: 7, volume: 8, envelope: 8, frequency: 1600, duty: 2 }],
+      ch7: [{ duration: 7, volume: 2, envelope: 1, frequency: 1200 }],
+      ch8: [{ duration: 7, volume: 12, envelope: 8, frequency: 75 }],
+    },
+  };
+  const unchanged = applyConversionEffects(source);
+  assert.deepEqual(unchanged.channels, source.channels);
+  assert.equal(detectConversionVolume(source), 80);
+  const loud = applyConversionEffects(source, { volumePercent: 100 });
+  assert.equal(loud.channels.ch5[0].volume, 15);
+  assert.equal(loud.channels.ch7[0].volume, 1);
+  assert.equal(loud.channels.ch8[0].volume, 15);
+  const faded = applyConversionEffects(source, { volumePercent: 80, fadeIn: true, fadeOut: true });
+  assert.equal(faded.channels.ch5[0].volume, 0);
+  assert.equal(faded.channels.ch5.at(-1).volume, 0);
+  assert.equal(faded.channels.ch5.reduce((sum, note) => sum + note.duration + 1, 0), 8);
+  assert.doesNotThrow(() => parseCryAsm(makeAsm(faded)));
 });
 
 test('custom Windows presets override bundled presets by id', async () => {

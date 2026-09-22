@@ -1,5 +1,5 @@
 import {
-  FRAME_RATE, MAX_SECONDS, makeAsm, prepareWav, readWav, suggestedLabel, convert,
+  applyConversionEffects, detectConversionVolume, FRAME_RATE, MAX_SECONDS, makeAsm, prepareWav, readWav, suggestedLabel, convert,
 } from '../src/converter.js';
 import { applyCryParameters, parseCryAsm, PITCH_MIN, PITCH_MAX, LENGTH_MIN, LENGTH_MAX } from '../src/cry-asm.js';
 import { fitAutoPreset, fitPrecisePreset, suggestPreset } from '../src/preset-engine.js';
@@ -16,6 +16,7 @@ const state = {
   sourceName: null,
   preparedSamples: null,
   project: null,
+  baseProject: null,
   asmText: null,
   cry: null,
   conversionSerial: 0,
@@ -24,6 +25,7 @@ const state = {
   resumeValidation: false,
   ignorePresetChange: false,
   ignoreCryChange: false,
+  effectTimer: 0,
 };
 
 function bytesToArrayBuffer(bytes) {
@@ -134,6 +136,9 @@ function setPage(name) {
 function setConversionBusy(busy, message = '') {
   $('#conversion-progress').hidden = !busy;
   $('#preset-select').disabled = busy;
+  $('#volume-input').disabled = busy;
+  $('#fade-in-button').disabled = busy;
+  $('#fade-out-button').disabled = busy;
   $('#export-button').disabled = busy || !state.project;
   $('#converted-play').disabled = busy || !convertedPlayer.objectUrl;
   if (message) $('#converted-detail').textContent = message;
@@ -176,6 +181,7 @@ function loadWav(file) {
     state.preparedSamples = readWav(prepared.wav).samples;
     state.stereoBalance = prepared.stereoBalance;
     state.project = null;
+    state.baseProject = null;
     convertedPlayer.clear();
     originalPlayer.setBuffer(buffer);
     $('#source-name').textContent = file.name;
@@ -197,6 +203,10 @@ function loadWav(file) {
 
 function beginConversion(preset) {
   const serial = ++state.conversionSerial;
+  if (state.effectTimer) {
+    window.clearTimeout(state.effectTimer);
+    state.effectTimer = 0;
+  }
   convertedPlayer.clear();
   setConversionBusy(true, preset.type === 'auto' ? 'Testing conversion profiles…' :
     preset.options?.precise ? 'Comparing hardware fits…' : 'Converting…');
@@ -220,16 +230,53 @@ function beginConversion(preset) {
         result = convert(state.preparedSamples, { ...preset.options, stereoBalance: state.stereoBalance });
       }
       if (serial !== state.conversionSerial) return;
-      state.project = { ...result, label: suggestedLabel(state.sourceName) };
-      convertedPlayer.setBuffer(preview ?? renderPreview(state.project));
+      state.baseProject = { ...result, label: suggestedLabel(state.sourceName) };
+      $('#volume-input').value = String(detectConversionVolume(state.baseProject));
+      $('#volume-value').textContent = `${$('#volume-input').value}%`;
+      applyEffects(preview);
       $('#converted-detail').textContent = `${detail} · ${formatDuration(result.previewDuration ?? result.sourceDuration)}`;
       setConversionBusy(false);
     } catch (error) {
       state.project = null;
+      state.baseProject = null;
       setConversionBusy(false, 'Conversion failed');
       showToast(error.message);
     }
   }, 0);
+}
+
+function effectOptions() {
+  return {
+    volumePercent: Number($('#volume-input').value),
+    fadeIn: $('#fade-in-button').getAttribute('aria-pressed') === 'true',
+    fadeOut: $('#fade-out-button').getAttribute('aria-pressed') === 'true',
+  };
+}
+
+function applyEffects(defaultPreview = null) {
+  if (!state.baseProject) return;
+  const options = effectOptions();
+  state.project = applyConversionEffects(state.baseProject, options);
+  const unchanged = options.volumePercent === detectConversionVolume(state.baseProject) &&
+    !options.fadeIn && !options.fadeOut;
+  convertedPlayer.setBuffer(unchanged && defaultPreview ? defaultPreview : renderPreview(state.project));
+}
+
+function scheduleEffects() {
+  $('#volume-value').textContent = `${$('#volume-input').value}%`;
+  if (!state.baseProject) return;
+  if (state.effectTimer) window.clearTimeout(state.effectTimer);
+  state.effectTimer = window.setTimeout(() => {
+    state.effectTimer = 0;
+    try { applyEffects(); }
+    catch (error) { showToast(error.message); }
+  }, 100);
+}
+
+function toggleEffect(button) {
+  const active = button.getAttribute('aria-pressed') !== 'true';
+  button.setAttribute('aria-pressed', String(active));
+  scheduleEffects();
 }
 
 async function exportAsm() {
@@ -334,6 +381,9 @@ $('#preset-select').addEventListener('change', event => {
   const preset = state.presets[event.target.selectedIndex];
   beginConversion(preset);
 });
+$('#volume-input').addEventListener('input', scheduleEffects);
+$('#fade-in-button').addEventListener('click', event => toggleEffect(event.currentTarget));
+$('#fade-out-button').addEventListener('click', event => toggleEffect(event.currentTarget));
 
 $('#cry-choice').addEventListener('change', event => {
   if (state.ignoreCryChange || !state.asmText) return;

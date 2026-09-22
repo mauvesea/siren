@@ -209,6 +209,16 @@ select:hover, input[type="number"]:hover { background: var(--layer-hover); }
 select:focus, input[type="number"]:focus { border-bottom: 2px solid var(--accent); }
 input[type="number"] { min-width: 128px; width: 128px; padding-right: 5px; font-variant-numeric: tabular-nums; }
 .export-button { width: 100%; min-height: 36px; }
+.range-control { display: flex; align-items: center; gap: 10px; min-width: 230px; }
+input[type="range"] { width: 180px; accent-color: var(--accent); }
+.range-control output { min-width: 42px; color: var(--text-secondary); font-variant-numeric: tabular-nums; text-align: right; }
+.effect-buttons { display: flex; gap: 6px; }
+.toggle-button {
+  min-height: 32px; padding: 5px 12px; color: var(--text-primary); background: var(--layer-strong);
+  border: 1px solid var(--stroke-strong); border-radius: var(--radius-control);
+}
+.toggle-button:hover { background: var(--layer-hover); }
+.toggle-button[aria-pressed="true"] { color: var(--on-accent); background: var(--accent); border-color: transparent; }
 
 .progress-ring { width: 20px; height: 20px; border: 2px solid color-mix(in srgb, var(--accent) 25%, transparent); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -248,7 +258,7 @@ input[type="number"] { min-width: 128px; width: 128px; padding-right: 5px; font-
   .page { width: calc(100% - 24px); padding-top: 24px; }
   .settings-row { flex-wrap: wrap; }
   .row-copy { min-width: calc(100% - 50px); }
-  select, input[type="number"] { margin-left: 46px; flex: 1; }
+  select, input[type="number"], .range-control, .effect-buttons { margin-left: 46px; flex: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {
