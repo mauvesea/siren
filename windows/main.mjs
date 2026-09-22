@@ -15,7 +15,7 @@ app.setName('Siren');
 app.setAppUserModelId('io.github.mauvesea.Siren');
 
 if (process.argv.includes('--version')) {
-  console.log('Siren 1.1.0');
+  console.log('Siren 1.1.1');
   app.exit(0);
 }
 

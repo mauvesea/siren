@@ -161,7 +161,7 @@ npm install
 npm run windows:pack
 ```
 
-This produces one `Siren-1.1.0.exe` in `dist`, containing the x64 and Arm64
+This produces one `Siren-1.1.1.exe` in `dist`, containing the x64 and Arm64
 payloads. It is a self-contained portable app: it can be launched directly and
 does not need an installer or adjacent runtime files. Use
 `npm run windows:dir` for unpacked development builds.

@@ -16,7 +16,7 @@ import { renderPreview } from './preview.js';
 import { applyCryParameters, parseCryAsm, PITCH_MIN, PITCH_MAX, LENGTH_MIN, LENGTH_MAX } from './cry-asm.js';
 
 const APP_ID = 'io.github.mauvesea.Siren';
-const VERSION = '1.1.0';
+const VERSION = '1.1.1';
 const REPOSITORY_URL = 'https://github.com/mauvesea/siren';
 const encoder = new TextEncoder();
 
@@ -270,14 +270,16 @@ class SirenWindow {
         orientation: Gtk.Orientation.VERTICAL,
         spacing: 0,
         width_request: sliderWidth,
-        hexpand: true,
         valign: Gtk.Align.CENTER,
       });
       const scale = new Gtk.Scale({
         orientation: Gtk.Orientation.HORIZONTAL,
         adjustment: new Gtk.Adjustment({ value: 0, lower: -100, upper: 100, step_increment: 1, page_increment: 10 }),
-        draw_value: false, hexpand: true,
+        draw_value: false,
       });
+      scale.add_mark(-100, Gtk.PositionType.BOTTOM, null);
+      scale.add_mark(0, Gtk.PositionType.BOTTOM, null);
+      scale.add_mark(100, Gtk.PositionType.BOTTOM, null);
       scale.connect('value-changed', () => this.scheduleVoiceControls());
       const endpoints = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, hexpand: true });
       const lowLabel = new Gtk.Label({ label: low, hexpand: true, halign: Gtk.Align.START, xalign: 0 });

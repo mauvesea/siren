@@ -34,8 +34,8 @@ done
 build_native_package() {
     format=$1
     case "$format" in
-        deb) target="Siren-1.1.0-amd64.deb" ;;
-        rpm) target="Siren-1.1.0-x86_64.rpm" ;;
+        deb) target="Siren-1.1.1-amd64.deb" ;;
+        rpm) target="Siren-1.1.1-x86_64.rpm" ;;
     esac
 
     if command -v nfpm >/dev/null 2>&1; then

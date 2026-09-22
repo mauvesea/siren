@@ -82,22 +82,22 @@
               <label class="settings-row" for="voice-pitch-input">
                 <div class="row-icon"><span class="fluent-icon" aria-hidden="true">&#xE790;</span></div>
                 <div class="row-copy"><strong>Pitch</strong></div>
-                <div class="voice-range-control"><span>Low</span><input id="voice-pitch-input" type="range" min="-100" max="100" step="1" value="0"><span>High</span></div>
+                <div class="voice-range-control"><span>Low</span><input id="voice-pitch-input" type="range" min="-100" max="100" step="1" value="0" list="voice-slider-marks"><span>High</span></div>
               </label>
               <label class="settings-row" for="voice-resonance-input">
                 <div class="row-icon"><span class="fluent-icon" aria-hidden="true">&#xE790;</span></div>
                 <div class="row-copy"><strong>Resonance</strong></div>
-                <div class="voice-range-control"><span>Dark</span><input id="voice-resonance-input" type="range" min="-100" max="100" step="1" value="0"><span>Bright</span></div>
+                <div class="voice-range-control"><span>Dark</span><input id="voice-resonance-input" type="range" min="-100" max="100" step="1" value="0" list="voice-slider-marks"><span>Bright</span></div>
               </label>
               <label class="settings-row" for="voice-weight-input">
                 <div class="row-icon"><span class="fluent-icon" aria-hidden="true">&#xE790;</span></div>
                 <div class="row-copy"><strong>Weight</strong></div>
-                <div class="voice-range-control"><span>Light</span><input id="voice-weight-input" type="range" min="-100" max="100" step="1" value="0"><span>Heavy</span></div>
+                <div class="voice-range-control"><span>Light</span><input id="voice-weight-input" type="range" min="-100" max="100" step="1" value="0" list="voice-slider-marks"><span>Heavy</span></div>
               </label>
               <label class="settings-row" for="voice-intonation-input">
                 <div class="row-icon"><span class="fluent-icon" aria-hidden="true">&#xE790;</span></div>
                 <div class="row-copy"><strong>Intonation</strong></div>
-                <div class="voice-range-control"><span>Shallow</span><input id="voice-intonation-input" type="range" min="-100" max="100" step="1" value="0"><span>Wide</span></div>
+                <div class="voice-range-control"><span>Shallow</span><input id="voice-intonation-input" type="range" min="-100" max="100" step="1" value="0" list="voice-slider-marks"><span>Wide</span></div>
               </label>
               <label class="settings-row" for="volume-input">
                 <div class="row-icon"><span class="fluent-icon" aria-hidden="true">&#xE767;</span></div>
@@ -116,6 +116,7 @@
                 </div>
               </div>
             </div>
+            <datalist id="voice-slider-marks"><option value="-100"></option><option value="0"></option><option value="100"></option></datalist>
           </section>
 
           <section class="settings-section" aria-labelledby="sound-heading">
@@ -215,7 +216,7 @@
 
   <dialog id="about-dialog" class="fluent-dialog">
     <form method="dialog">
-      <div class="dialog-hero"><img src="../data/io.github.mauvesea.Siren.svg" alt=""><div><h2>About Siren</h2><p>Version 1.1.0</p></div></div>
+      <div class="dialog-hero"><img src="../data/io.github.mauvesea.Siren.svg" alt=""><div><h2>About Siren</h2><p>Version 1.1.1</p></div></div>
       <p>Convert WAV audio and audition pokecrystal cry parameters.</p>
       <div class="dialog-links">
         <button type="button" data-url="https://github.com/mauvesea/siren">Repository</button>
