@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "textured",
   "name": "Textured",
-  "description": "Uses the source spectrum to add noise only where the cry is noisy.",
+  "description": "Adds responsive texture only to noisy parts of the source.",
   "type": "profile",
   "options": {
     "minHz": 90,

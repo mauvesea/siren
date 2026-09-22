@@ -87,7 +87,7 @@ Bundled presets are extended or overridden on Windows by JSON files in
 
 Every profile is a readable JSON file in [`Presets`](Presets). The **Auto**
 preset searches the available profiles for a close match. The menu sorts
-presets alphabetically by `id`.
+profiles alphabetically by name, with **Auto** first and **Precise** last.
 
 **Precise** compares two reconstructions at each playable Game Boy frame and
 keeps the closer measured fit. It uses pokecrystal's fixed wave patterns,
