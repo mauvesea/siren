@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "id": "raspy_bass",
-  "name": "Raspy Bass",
+  "id": "bass_raspy",
+  "name": "Bass (Raspy)",
   "description": "Keeps a deep tonal base while preserving strong crunchy upper texture.",
   "type": "profile",
   "options": {

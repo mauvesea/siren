@@ -9,14 +9,14 @@ import Gst from 'gi://Gst?version=1.0';
 import Gtk from 'gi://Gtk?version=4.0';
 
 import { MAX_BYTES, MAX_SECONDS, makeAsm, makePlaybackWav, prepareWav, readWav, suggestedLabel, convert } from './converter.js';
-import { fitAutoPreset, suggestPreset } from './preset-engine.js';
+import { fitAutoPreset, fitPrecisePreset, suggestPreset } from './preset-engine.js';
 import { loadPresetDirectories } from './preset-loader.js';
 import { renderPreview } from './preview.js';
 import { applyCryParameters, parseCryAsm, PITCH_MIN, PITCH_MAX, LENGTH_MIN, LENGTH_MAX } from './cry-asm.js';
 
 const APP_ID = 'io.github.mauvesea.Siren';
-const VERSION = '1.0.0';
-const REPOSITORY_URL = 'https://github.com/mauvesea/pokecry';
+const VERSION = '1.1.0';
+const REPOSITORY_URL = 'https://github.com/mauvesea/siren';
 const encoder = new TextEncoder();
 
 function formatDuration(seconds) {
@@ -250,7 +250,6 @@ class SirenWindow {
     this.presetRow.connect('notify::selected', () => {
       if (this.ignorePresetChanges || !this.sourceFile) return;
       const preset = this.presets[this.presetRow.selected];
-      this.presetRow.subtitle = preset.description;
       this.beginConversion(preset);
     });
     presetGroup.add(this.presetRow);
@@ -505,6 +504,7 @@ class SirenWindow {
       this.convertedPlayer.stop();
       this.sourceFile = file;
       this.preparedSamples = preparedSamples;
+      this.stereoBalance = prepared.stereoBalance;
       this.project = null;
       this.fileRow.title = file.get_basename();
       this.fileRow.subtitle = `${source.channels} channel${source.channels === 1 ? '' : 's'} · ${source.rate.toLocaleString()} Hz · ${formatDuration(source.duration)}`;
@@ -519,7 +519,6 @@ class SirenWindow {
       this.presetRow.selected = selected;
       this.ignorePresetChanges = false;
       const preset = this.presets[selected];
-      this.presetRow.subtitle = `${preset.description} Recommended for this WAV.`;
       this.beginConversion(preset);
     } catch (error) {
       this.showToast(error.message);
@@ -538,11 +537,12 @@ class SirenWindow {
   beginConversion(preset) {
     const serial = ++this.conversionSerial;
     this.convertedPlayer.stop();
-    this.setBusy(true, preset.type === 'auto' ? 'Testing conversion profiles…' : 'Converting…');
+    this.setBusy(true, preset.type === 'auto' ? 'Testing conversion profiles…' :
+      preset.options?.precise ? 'Comparing hardware fits…' : 'Converting…');
     GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
       if (serial !== this.conversionSerial) return GLib.SOURCE_REMOVE;
       try {
-        let result;
+        let result, preview;
         let detail = preset.name;
         if (preset.type === 'auto') {
           const fitted = fitAutoPreset(this.preparedSamples, this.profilePresets, preset,
@@ -550,14 +550,17 @@ class SirenWindow {
           result = fitted.result;
           const basis = this.presets.find(item => item.id === fitted.basis);
           detail = `${preset.name} · based on ${basis?.name ?? fitted.basis}`;
+        } else if (preset.options?.precise) {
+          const fitted = fitPrecisePreset(this.preparedSamples, this.stereoBalance);
+          result = fitted.result;
+          preview = fitted.preview;
         } else {
-          result = convert(this.preparedSamples, preset.options);
+          result = convert(this.preparedSamples, { ...preset.options, stereoBalance: this.stereoBalance });
         }
         if (serial !== this.conversionSerial) return GLib.SOURCE_REMOVE;
         this.project = { ...result, label: suggestedLabel(this.sourceFile.get_basename()) };
-        const preview = renderPreview(this.project);
-        this.writePreview(preview);
-        this.convertedRow.subtitle = `${detail} · ${formatDuration(result.sourceDuration)}`;
+        this.writePreview(preview ?? renderPreview(this.project));
+        this.convertedRow.subtitle = `${detail} · ${formatDuration(result.previewDuration ?? result.sourceDuration)}`;
         this.setBusy(false);
       } catch (error) {
         this.project = null;

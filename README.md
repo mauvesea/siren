@@ -1,9 +1,14 @@
+<p align="center">
+  <img src="data/io.github.mauvesea.Siren.svg" alt="Siren logo" width="256" height="256">
+</p>
+
 # Siren
 
-Siren converts WAV recordings into three-channel cries and lets you audition
+Siren converts WAV recordings into Game Boy cries and lets you audition
 the pitch and length of existing cry ASM files for
 [pokecrystal](https://github.com/pret/pokecrystal). The cries use Game Boy
-square-wave channels 5 and 6 and noise channel 8. Generated cries are intended
+square-wave channels 5 and 6 and noise channel 8. The **Precise** preset can
+also use the built-in wave channel 7. Generated cries are intended
 for **pitch 0** and **length 256**.
 
 This tool is AI assisted.
@@ -37,9 +42,9 @@ Parameter Validation does not export or modify the ASM file.
 Very long cries play their first 15 seconds so every allowed parameter value
 can still be auditioned promptly.
 
-The validator understands pokecrystal cry headers, square and noise notes,
-duty cycles and patterns, pitch offsets and sweeps, and finite jumps, calls,
-and loops within the chosen file. It reports unsupported commands instead of
+The validator understands pokecrystal cry headers, square, wave and noise notes,
+duty cycles and patterns, pitch offsets and sweeps, stereo routing and volume,
+and finite jumps, calls, and loops within the chosen file. It reports unsupported commands instead of
 silently playing them incorrectly. The preview simulates the Game Boy's
 digital channels and timing; analog output coloration and playback hardware
 can still sound different, so confirm final values in an emulator or on a
@@ -84,6 +89,13 @@ Every profile is a readable JSON file in [`Presets`](Presets). The **Auto**
 preset searches the available profiles for a close match. The menu sorts
 presets alphabetically by `id`.
 
+**Precise** compares two reconstructions at each playable Game Boy frame and
+keeps the closer measured fit. It uses pokecrystal's fixed wave patterns,
+follows source dynamics, retains overall stereo balance from two-channel WAVs,
+and merges repeated commands. A stock cry
+cannot preserve arbitrary PCM samples, sample rate, or bit depth. See the
+[engine analysis and fidelity limits](docs/precise-engine.md).
+
 See [`Presets/README.md`](Presets/README.md) for fields and limits. In a source
 checkout, add files to `Presets/`. For an AppImage, add a `Presets` folder beside
 the executable. Every installation also reads `~/.config/siren/Presets/`.
@@ -124,7 +136,7 @@ npm install
 npm run windows:pack
 ```
 
-This produces one `Siren-1.0.0.exe` in `dist`, containing the x64 and Arm64
+This produces one `Siren-1.1.0.exe` in `dist`, containing the x64 and Arm64
 payloads. It is a self-contained portable app: it can be launched directly and
 does not need an installer or adjacent runtime files. Use
 `npm run windows:dir` for unpacked development builds.

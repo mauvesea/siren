@@ -2,7 +2,7 @@ import {
   FRAME_RATE, MAX_SECONDS, makeAsm, prepareWav, readWav, suggestedLabel, convert,
 } from '../src/converter.js';
 import { applyCryParameters, parseCryAsm, PITCH_MIN, PITCH_MAX, LENGTH_MIN, LENGTH_MAX } from '../src/cry-asm.js';
-import { fitAutoPreset, suggestPreset } from '../src/preset-engine.js';
+import { fitAutoPreset, fitPrecisePreset, suggestPreset } from '../src/preset-engine.js';
 import { renderPreview } from '../src/preview.js';
 import { parsePresetDirectories } from './preset-schema.js';
 
@@ -174,6 +174,7 @@ function loadWav(file) {
     state.sourcePath = file.path;
     state.sourceName = file.name;
     state.preparedSamples = readWav(prepared.wav).samples;
+    state.stereoBalance = prepared.stereoBalance;
     state.project = null;
     convertedPlayer.clear();
     originalPlayer.setBuffer(buffer);
@@ -190,7 +191,6 @@ function loadWav(file) {
     $('#preset-select').selectedIndex = selected;
     state.ignorePresetChange = false;
     const preset = state.presets[selected];
-    $('#preset-detail').textContent = `${preset.description} Recommended for this WAV.`;
     beginConversion(preset);
   } catch (error) { showToast(error.message); }
 }
@@ -198,11 +198,12 @@ function loadWav(file) {
 function beginConversion(preset) {
   const serial = ++state.conversionSerial;
   convertedPlayer.clear();
-  setConversionBusy(true, preset.type === 'auto' ? 'Testing conversion profiles…' : 'Converting…');
+  setConversionBusy(true, preset.type === 'auto' ? 'Testing conversion profiles…' :
+    preset.options?.precise ? 'Comparing hardware fits…' : 'Converting…');
   window.setTimeout(() => {
     if (serial !== state.conversionSerial) return;
     try {
-      let result;
+      let result, preview;
       let detail = preset.name;
       if (preset.type === 'auto') {
         const fitted = fitAutoPreset(state.preparedSamples, state.profiles, preset, (current, total) => {
@@ -211,13 +212,17 @@ function beginConversion(preset) {
         result = fitted.result;
         const basis = state.presets.find(item => item.id === fitted.basis);
         detail = `${preset.name} · based on ${basis?.name ?? fitted.basis}`;
+      } else if (preset.options?.precise) {
+        const fitted = fitPrecisePreset(state.preparedSamples, state.stereoBalance);
+        result = fitted.result;
+        preview = fitted.preview;
       } else {
-        result = convert(state.preparedSamples, preset.options);
+        result = convert(state.preparedSamples, { ...preset.options, stereoBalance: state.stereoBalance });
       }
       if (serial !== state.conversionSerial) return;
       state.project = { ...result, label: suggestedLabel(state.sourceName) };
-      convertedPlayer.setBuffer(renderPreview(state.project));
-      $('#converted-detail').textContent = `${detail} · ${formatDuration(result.sourceDuration)}`;
+      convertedPlayer.setBuffer(preview ?? renderPreview(state.project));
+      $('#converted-detail').textContent = `${detail} · ${formatDuration(result.previewDuration ?? result.sourceDuration)}`;
       setConversionBusy(false);
     } catch (error) {
       state.project = null;
@@ -307,8 +312,6 @@ async function initializePresets() {
     state.profiles = state.presets.filter(preset => preset.type === 'profile');
     const select = $('#preset-select');
     select.replaceChildren(...state.presets.map(preset => new Option(preset.name, preset.id)));
-    const initial = state.presets[0];
-    if (initial) $('#preset-detail').textContent = initial.description;
   } catch (error) {
     showToast(error.message);
     $('#converter-open').disabled = true;
@@ -329,7 +332,6 @@ $$('#about-dialog [data-url]').forEach(button => button.addEventListener('click'
 $('#preset-select').addEventListener('change', event => {
   if (state.ignorePresetChange || !state.sourcePath) return;
   const preset = state.presets[event.target.selectedIndex];
-  $('#preset-detail').textContent = preset.description;
   beginConversion(preset);
 });
 

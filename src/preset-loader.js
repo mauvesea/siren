@@ -6,6 +6,7 @@ const LIMITS = { id: 32, name: 32, description: 255, type: 32, noiseMode: 32 };
 const PROFILE_FIELDS = new Set([
   'noisePitch', 'noiseGain', 'minHz', 'maxHz', 'stepFrames',
   'secondGain', 'noiseMode', 'smoothing',
+  'precise',
 ]);
 
 function boundedString(value, field, filename) {
@@ -37,6 +38,8 @@ function validateProfile(preset, filename) {
   }
   if (options.stepFrames !== undefined && ![1, 2].includes(options.stepFrames))
     throw new Error(`${filename}: stepFrames must be 1 or 2.`);
+  if (options.precise !== undefined && typeof options.precise !== 'boolean')
+    throw new Error(`${filename}: precise must be true or false.`);
   if (options.noisePitch !== undefined && !Number.isInteger(options.noisePitch))
     throw new Error(`${filename}: noisePitch must be a whole number.`);
   if (options.noiseMode !== undefined) {
@@ -95,6 +98,15 @@ function validatePreset(preset, filename) {
   return preset;
 }
 
+function comparePresets(a, b) {
+  if (a.id === 'auto') return b.id === 'auto' ? 0 : -1;
+  if (b.id === 'auto') return 1;
+  if (a.id === 'precise') return b.id === 'precise' ? 0 : 1;
+  if (b.id === 'precise') return -1;
+  const byName = a.name.localeCompare(b.name);
+  return byName || a.id.localeCompare(b.id);
+}
+
 export function loadPresets(directoryPath) {
   const directory = Gio.File.new_for_path(directoryPath);
   const presets = [];
@@ -122,7 +134,7 @@ export function loadPresets(directoryPath) {
     }
   }
   enumerator.close(null);
-  presets.sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  presets.sort(comparePresets);
   const ids = new Set();
   for (const preset of presets) {
     if (ids.has(preset.id)) throw new Error(`Preset id “${preset.id}” is duplicated.`);
@@ -138,7 +150,7 @@ export function loadPresetDirectories(directoryPaths) {
     for (const preset of loadPresets(directoryPath)) byId.set(preset.id, preset);
   }
   const presets = [...byId.values()];
-  presets.sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  presets.sort(comparePresets);
   if (!presets.some(preset => preset.type === 'profile'))
     throw new Error('No profile presets were found in the Presets folders.');
   return presets;

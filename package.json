@@ -1,9 +1,9 @@
 {
   "name": "siren",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Convert WAV recordings into pokecrystal cries and audition cry parameters.",
   "author": "Mauvesea",
-  "homepage": "https://github.com/mauvesea/pokecry",
+  "homepage": "https://github.com/mauvesea/siren",
   "private": true,
   "type": "module",
   "main": "windows/main.mjs",
@@ -30,6 +30,8 @@
       "src/cry-asm.js",
       "src/preset-engine.js",
       "src/preview.js",
+      "src/quality.js",
+      "src/wave-samples.js",
       "Presets/**/*",
       "package.json"
     ],

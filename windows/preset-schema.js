@@ -2,6 +2,7 @@ const LIMITS = { id: 32, name: 32, description: 255, type: 32, noiseMode: 32 };
 const PROFILE_FIELDS = new Set([
   'noisePitch', 'noiseGain', 'minHz', 'maxHz', 'stepFrames',
   'secondGain', 'noiseMode', 'smoothing',
+  'precise',
 ]);
 
 function boundedString(value, field, filename) {
@@ -32,6 +33,8 @@ function validateProfile(preset, filename) {
   }
   if (preset.options.stepFrames !== undefined && ![1, 2].includes(preset.options.stepFrames))
     throw new Error(`${filename}: stepFrames must be 1 or 2.`);
+  if (preset.options.precise !== undefined && typeof preset.options.precise !== 'boolean')
+    throw new Error(`${filename}: precise must be true or false.`);
   if (preset.options.noisePitch !== undefined && !Number.isInteger(preset.options.noisePitch))
     throw new Error(`${filename}: noisePitch must be a whole number.`);
   if (preset.options.noiseMode !== undefined) {
@@ -92,6 +95,15 @@ export function validatePreset(preset, filename) {
   return preset;
 }
 
+function comparePresets(a, b) {
+  if (a.id === 'auto') return b.id === 'auto' ? 0 : -1;
+  if (b.id === 'auto') return 1;
+  if (a.id === 'precise') return b.id === 'precise' ? 0 : 1;
+  if (b.id === 'precise') return -1;
+  const byName = a.name.localeCompare(b.name);
+  return byName || a.id.localeCompare(b.id);
+}
+
 export function parsePresetDirectories(directories) {
   const byId = new Map();
   for (const files of directories) {
@@ -105,7 +117,7 @@ export function parsePresetDirectories(directories) {
       byId.set(preset.id, preset);
     }
   }
-  const presets = [...byId.values()].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  const presets = [...byId.values()].sort(comparePresets);
   if (!presets.some(preset => preset.type === 'profile'))
     throw new Error('No profile presets were found in the Presets folders.');
   return presets;

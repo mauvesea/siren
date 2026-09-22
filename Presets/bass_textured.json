@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "bass_textured",
+  "name": "Bass (Textured)",
+  "description": "Balances a deep tonal foundation with detailed upper grit from the source.",
+  "type": "profile",
+  "options": {
+    "minHz": 64,
+    "maxHz": 1300,
+    "stepFrames": 2,
+    "noisePitch": 44,
+    "noiseGain": 1.65,
+    "secondGain": 0.68,
+    "noiseMode": "texture"
+  }
+}

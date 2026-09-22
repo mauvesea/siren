@@ -26,9 +26,13 @@ test('Windows uses the shared converter and preview behavior', async () => {
   const presets = await bundledPresets();
   const profiles = presets.filter(preset => preset.type === 'profile');
   const auto = presets.find(preset => preset.type === 'auto');
-  assert.equal(presets.length, 19);
-  assert.equal(profiles.length, 18);
+  assert.equal(presets.length, 22);
+  assert.equal(profiles.length, 21);
   assert.ok(auto);
+  assert.equal(presets[0].id, 'auto');
+  assert.equal(presets.at(-1).id, 'precise');
+  assert.ok(presets.slice(1, -1).every((preset, index, middle) =>
+    index === 0 || middle[index - 1].name.localeCompare(preset.name) <= 0));
 
   const rate = 10512;
   const samples = Float64Array.from({ length: 17 * 176 }, (_, i) => {

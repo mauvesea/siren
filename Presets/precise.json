@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "id": "precise",
+  "name": "Precise",
+  "description": "Compares two frame-level hardware reconstructions, including wave and noise timbres, then keeps the closer measured fit. Slower for complex WAVs.",
+  "type": "profile",
+  "options": {
+    "precise": true
+  }
+}

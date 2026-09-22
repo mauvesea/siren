@@ -59,16 +59,18 @@ export function parseCryAsm(source, selectedCry = null) {
     if (!item || item.op !== 'channel' || item.args.length !== 2)
       throw new Error(`Cry header needs ${count} channel entries.`);
     const channel = number(item.args[0], item.line);
-    if (![5, 6, 8].includes(channel) || targets.has(channel))
-      throw new Error(`Line ${item.line}: only unique cry channels 5, 6 and 8 are supported.`);
+    if (![5, 6, 7, 8].includes(channel) || targets.has(channel))
+      throw new Error(`Line ${item.line}: only unique cry channels 5–8 are supported.`);
     targets.set(channel, item.args[1]);
   }
-  const channels = { ch5: [], ch6: [], ch8: [] };
+  const channels = { ch5: [], ch6: [], ch7: [], ch8: [] };
+  let pan = null;
   for (const [channel, label] of targets) {
     if (!labels.has(label)) throw new Error(`Missing channel label ${label}.`);
     const notes = channels[`ch${channel}`];
-    const kind = channel === 8 ? 'noise' : 'square';
+    const kind = channel === 8 ? 'noise' : channel === 7 ? 'wave' : 'square';
     let pc = labels.get(label), duty = 2, pattern = null, patternId = 0, offset = null, sweep = null;
+    let route = 'both';
     const calls = [];
     let activeLoop = null, loopLeft = 0;
     let steps = 0;
@@ -95,6 +97,7 @@ export function parseCryAsm(source, selectedCry = null) {
             if (channel === 5 && sweep) note.sweep = sweep;
           }
           if (offset !== null) note.offsetOverride = offset;
+          note.route = route;
           try { validateNote(note, kind); } catch (error) { throw new Error(`Line ${item.line}: ${error.message}`); }
           notes.push(note);
           break;
@@ -114,6 +117,21 @@ export function parseCryAsm(source, selectedCry = null) {
         case 'pitch_offset':
           offset = range(arg(0), -32768, 65535, 'pitch_offset', item.line);
           break;
+        case 'volume':
+          if (item.args.length !== 2) throw new Error(`Line ${item.line}: volume needs left and right levels.`);
+          pan = { left: range(arg(0), 0, 7, 'left volume', item.line),
+            right: range(arg(1), 0, 7, 'right volume', item.line), route: 'both' };
+          break;
+        case 'force_stereo_panning': {
+          if (item.args.length !== 2) throw new Error(`Line ${item.line}: force_stereo_panning needs two booleans.`);
+          const values = item.args.map(value => {
+            if (/^(TRUE|1)$/i.test(value)) return true;
+            if (/^(FALSE|0)$/i.test(value)) return false;
+            throw new Error(`Line ${item.line}: expected TRUE or FALSE.`);
+          });
+          route = values[0] && values[1] ? 'both' : values[0] ? 'left' : values[1] ? 'right' : 'none';
+          break;
+        }
         case 'pitch_sweep':
           if (channel !== 5 || item.args.length !== 2)
             throw new Error(`Line ${item.line}: pitch_sweep requires channel 5 and two arguments.`);
@@ -143,7 +161,7 @@ export function parseCryAsm(source, selectedCry = null) {
     }
   }
   if (!Object.values(channels).some(notes => notes.length)) throw new Error('No playable cry notes found.');
-  return { channels, label: instructions[header].scope || 'Cry', availableCries };
+  return { channels, pan, label: instructions[header].scope || 'Cry', availableCries };
 }
 
 // Pokecrystal SetNoteDuration: byte-sized delay, 16-bit tempo and an 8-bit
@@ -154,7 +172,7 @@ export function applyCryParameters(cry, pitch, length) {
   if (!Number.isInteger(length) || length < LENGTH_MIN || length > LENGTH_MAX)
     throw new Error(`Length must be ${LENGTH_MIN}–${LENGTH_MAX}.`);
   const channels = {};
-  for (const key of ['ch5', 'ch6', 'ch8']) {
+  for (const key of ['ch5', 'ch6', 'ch7', 'ch8']) {
     let remainder = 0;
     let elapsed = 0, previousPattern = null, patternStart = 0;
     channels[key] = cry.channels[key].map(note => {
@@ -176,5 +194,5 @@ export function applyCryParameters(cry, pitch, length) {
       return adjusted;
     });
   }
-  return { channels };
+  return { channels, pan: cry.pan };
 }

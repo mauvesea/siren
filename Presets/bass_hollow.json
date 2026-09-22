@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "id": "hollow_bass",
-  "name": "Hollow Bass",
+  "id": "bass_hollow",
+  "name": "Bass (Hollow)",
   "description": "Restricts the tonal search to low resonances and adds a controlled hollow noise layer.",
   "type": "profile",
   "options": {

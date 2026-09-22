@@ -1,4 +1,5 @@
 // Deterministic Siren conversion core. Keep constants and scoring in sync.
+import { WAVE_SAMPLES } from './wave-samples.js';
 export const RATE = 10512;
 export const FRAME_SAMPLES = 176;
 export const FRAME_RATE = 4194304 / 70224;
@@ -66,16 +67,22 @@ export function readWav(buffer) {
   if (!count) throw new Error('The WAV contains no audio samples.');
   const mono = new Float64Array(count);
   const width = bits / 8;
+  let leftPower = 0, rightPower = 0;
   for (let i = 0; i < count; i++) {
     let sum = 0;
     for (let ch = 0; ch < channels; ch++) {
       const offset = audio.begin + i * align + ch * width;
-      sum += decodeSample(view, offset, code, bits);
+      const sample = decodeSample(view, offset, code, bits);
+      sum += sample;
+      if (channels === 2 && ch === 0) leftPower += sample * sample;
+      if (channels === 2 && ch === 1) rightPower += sample * sample;
     }
     mono[i] = sum / channels;
   }
+  const left = Math.sqrt(leftPower), right = Math.sqrt(rightPower);
   return {
     samples: mono, rate, channels, duration: count / rate,
+    stereoBalance: channels === 2 && left + right > 0 ? left / (left + right) : null,
     playback: { buffer, begin: audio.begin, count, align, code, bits },
   };
 }
@@ -94,13 +101,30 @@ export function prepareWav(source, startSeconds = 0, endSeconds = Math.min(sourc
   const last = Math.min(source.samples.length, Math.ceil(Math.min(endSeconds, source.duration) * source.rate));
   const count = Math.max(1, round((last - first) * RATE / source.rate));
   const samples = new Float64Array(count);
-  // Same linear interpolation as the reference Python converter.
+  const ratio = source.rate / RATE;
+  const radius = Math.ceil(8 * ratio);
+  const cutoff = 0.95 / ratio;
+  const sinc = value => value === 0 ? 1 : Math.sin(Math.PI * value) / (Math.PI * value);
   for (let i = 0; i < count; i++) {
     const x = first + i * source.rate / RATE;
-    const a = Math.floor(x), b = Math.min(source.samples.length - 1, a + 1);
-    samples[i] = a >= source.samples.length ? 0 : source.samples[a] * (1 - (x - a)) + source.samples[b] * (x - a);
+    if (ratio <= 1) {
+      const a = Math.floor(x), b = Math.min(source.samples.length - 1, a + 1);
+      samples[i] = a >= source.samples.length ? 0 : source.samples[a] * (1 - (x - a)) + source.samples[b] * (x - a);
+    } else {
+      // Band-limit before downsampling so upper WAV frequencies do not fold
+      // into false Game Boy pitches. Normalize the truncated edge kernels.
+      let sum = 0, weight = 0;
+      for (let j = Math.max(first, Math.ceil(x - radius)); j <= Math.min(last - 1, Math.floor(x + radius)); j++) {
+        const distance = x - j;
+        const kernel = cutoff * sinc(cutoff * distance) * sinc(distance / radius);
+        sum += source.samples[j] * kernel;
+        weight += kernel;
+      }
+      samples[i] = weight ? sum / weight : 0;
+    }
   }
-  return { samples, rate: RATE, duration: count / RATE, wav: encodeWav(samples, RATE) };
+  return { samples, rate: RATE, duration: count / RATE, wav: encodeWav(samples, RATE),
+    stereoBalance: source.stereoBalance };
 }
 
 export function encodeWav(samples, rate) {
@@ -266,11 +290,11 @@ function spectrum(samples, frame, fast = false) {
 const ATOMS = [];
 // The Game Boy's lowest square pitch is about 64 Hz. Other profiles need a
 // wider search than the original 120–1100 Hz range.
-for (let hz = 64; hz <= 1800; hz += 2) {
+for (let hz = 64; hz <= 4200; hz += 2) {
   for (let duty = 0; duty < 4; duty++) {
     const indexes = [], weights = [];
     for (let k = 1; k <= 8; k++) {
-      if (k * hz > 3500) break;
+      if (k * hz > 4200) break;
       const weight = Math.abs(Math.sin(Math.PI * k * DUTIES[duty])) / k ** 1.2;
       if (weight < 0.05) continue;
       indexes.push(round(k * hz / BIN_HZ)); weights.push(weight);
@@ -372,8 +396,10 @@ function smooth(notes) {
 export function convert(samples, {
   noisePitch = 92, noiseGain = 1, minHz = 120, maxHz = 1100,
   stepFrames = 2, secondGain = 1, noiseMode = 'fixed', smoothing = 'legacy',
+  precise = false, stereoBalance = null, preciseTuning = {},
 } = {}) {
   if (!samples.length) throw new Error('There are no samples to convert.');
+  if (precise) return convertPrecise(samples, stereoBalance, preciseTuning);
   if (![1, 2].includes(stepFrames)) throw new Error('Step size must be one or two frames.');
   const frames = Math.ceil(samples.length / FRAME_SAMPLES);
   const first = [], candidates = [], rms = [], texture = [];
@@ -405,28 +431,245 @@ export function convert(samples, {
   return { channels, frames, sourceDuration: samples.length / RATE };
 }
 
+const WAVE_HARMONICS = WAVE_SAMPLES.map(wave => {
+  const magnitudes = [];
+  for (let harmonic = 1; harmonic <= 8; harmonic++) {
+    let real = 0, imaginary = 0;
+    for (let i = 0; i < 32; i++) {
+      const angle = 2 * Math.PI * harmonic * i / 32;
+      real += (wave[i] - 7.5) * Math.cos(angle);
+      imaginary += (wave[i] - 7.5) * Math.sin(angle);
+    }
+    magnitudes.push(Math.hypot(real, imaginary));
+  }
+  const norm = Math.hypot(...magnitudes) || 1;
+  return magnitudes.map(value => value / norm);
+});
+
+function bestWave(samples, frame, hz) {
+  const span = hz < 90 ? 5 : 1;
+  const first = Math.max(0, (frame - span) * FRAME_SAMPLES);
+  const last = Math.min(samples.length, (frame + span + 1) * FRAME_SAMPLES);
+  const magnitudes = [];
+  for (let harmonic = 1; harmonic <= 8; harmonic++) {
+    if (hz * harmonic >= RATE / 2) { magnitudes.push(0); continue; }
+    let real = 0, imaginary = 0;
+    for (let i = first; i < last; i++) {
+      const angle = 2 * Math.PI * hz * harmonic * i / RATE;
+      const window = 0.5 - 0.5 * Math.cos(2 * Math.PI * (i - first) / Math.max(1, last - first - 1));
+      real += samples[i] * window * Math.cos(angle);
+      imaginary += samples[i] * window * Math.sin(angle);
+    }
+    magnitudes.push(Math.hypot(real, imaginary));
+  }
+  const norm = Math.hypot(...magnitudes) || 1;
+  let best = { index: 0, score: 0 };
+  for (let index = 0; index < WAVE_HARMONICS.length; index++) {
+    let score = 0;
+    for (let harmonic = 0; harmonic < 8; harmonic++)
+      score += magnitudes[harmonic] / norm * WAVE_HARMONICS[index][harmonic];
+    if (score > best.score) best = { index, score };
+  }
+  return best;
+}
+
+function refinePeriodicHz(samples, frame, fallback) {
+  const first = Math.max(1, (frame - 2) * FRAME_SAMPLES);
+  const last = Math.min(samples.length, (frame + 3) * FRAME_SAMPLES);
+  const periods = [];
+  let previousCrossing = null;
+  for (let i = first; i < last; i++) {
+    if (samples[i - 1] <= 0 && samples[i] > 0) {
+      const crossing = i - 1 - samples[i - 1] / (samples[i] - samples[i - 1]);
+      if (previousCrossing !== null) periods.push(crossing - previousCrossing);
+      previousCrossing = crossing;
+    }
+  }
+  if (periods.length < 4) return fallback;
+  const hz = RATE / median(periods);
+  return Math.abs(Math.log2(hz / fallback)) < 0.08 ? hz : fallback;
+}
+
+function detectLowHz(samples, frame, referenceHz) {
+  if (referenceHz > 300) return null;
+  const first = Math.max(1, (frame - 8) * FRAME_SAMPLES);
+  const last = Math.min(samples.length, (frame + 9) * FRAME_SAMPLES);
+  const periods = [];
+  let previousCrossing = null;
+  for (let i = first; i < last; i++) {
+    if (samples[i - 1] <= 0 && samples[i] > 0) {
+      const crossing = i - 1 - samples[i - 1] / (samples[i] - samples[i - 1]);
+      if (previousCrossing !== null) periods.push(crossing - previousCrossing);
+      previousCrossing = crossing;
+    }
+  }
+  if (periods.length < 4) return null;
+  const period = median(periods);
+  const deviation = median(periods.map(value => Math.abs(value - period))) / period;
+  const hz = RATE / period;
+  return hz >= 33 && hz < 64 && referenceHz / hz < 4.5 && deviation < 0.06 ? hz : null;
+}
+
+function independentWaveHz(samples, frame, excluded, config) {
+  const residual = spectrum(samples, frame, true);
+  for (const hz of excluded) {
+    for (let harmonic = 1; harmonic * hz < 4200; harmonic++) {
+      const center = round(harmonic * hz / BIN_HZ);
+      for (let offset = -config.waveExclusionBins; offset <= config.waveExclusionBins; offset++)
+        if (center + offset >= 0 && center + offset < residual.length) residual[center + offset] = 0;
+    }
+  }
+  let best = 0, score = 0;
+  for (let bin = Math.ceil(config.waveMinHz / BIN_HZ); bin < Math.min(residual.length, Math.floor(4200 / BIN_HZ)); bin++) {
+    const hz = bin * BIN_HZ;
+    const value = residual[bin] * (hz / 300) ** config.waveHighBias;
+    if (value > score) { best = bin; score = value; }
+  }
+  return best ? { hz: best * BIN_HZ, score } : null;
+}
+
+function compactNotes(notes, kind) {
+  const result = [];
+  for (const raw of notes) {
+    const note = { ...raw };
+    if (!note.volume) {
+      note.frequency = 0;
+      if (kind === 'square') note.duty = 2;
+      if (kind === 'wave') note.envelope = 0;
+    }
+    const previous = result.at(-1);
+    const same = previous && previous.volume === note.volume &&
+      previous.envelope === note.envelope && previous.frequency === note.frequency &&
+      (kind !== 'square' || previous.duty === note.duty);
+    // A length byte of $ff wraps to zero in SetNoteDuration, so cap at 255 frames.
+    if (same && previous.duration + note.duration + 2 <= 255)
+      previous.duration += note.duration + 1;
+    else result.push(note);
+  }
+  return result;
+}
+
+function convertPrecise(samples, stereoBalance, tuning = {}) {
+  const config = {
+    waveMode: 'shared', waveExclusionBins: 4, waveMinHz: 110,
+    waveHighBias: 0.15, waveFitThreshold: 0.78,
+    pulseWaveBlend: 0.35, secondStability: 0.05,
+    primaryMinHz: 64, noiseStrength: 0, noisePitch: 84,
+    noiseFlatnessStart: 0.05, noiseFlatnessFull: 0.35,
+    ...tuning,
+  };
+  // All stock cry streams are polled once per VBlank. Choose the nearest full
+  // frame count and let the hardware generators run at their native clocks.
+  const frames = Math.max(1, Math.round(samples.length / FRAME_SAMPLES));
+  const base = convert(samples.subarray(0, Math.min(samples.length, frames * FRAME_SAMPLES)), {
+    minHz: config.primaryMinHz, maxHz: 4200, stepFrames: 1, noiseGain: 0.8,
+    noiseMode: 'texture', smoothing: 'none',
+  });
+  const channels = { ch5: [], ch6: [], ch7: [], ch8: [] };
+  let peakRms = 0;
+  const rms = [];
+  for (let frame = 0; frame < frames; frame++) {
+    let sum = 0, count = 0;
+    for (let i = frame * FRAME_SAMPLES; i < Math.min(samples.length, (frame + 1) * FRAME_SAMPLES); i++) {
+      sum += samples[i] ** 2; count++;
+    }
+    rms.push(Math.sqrt(sum / Math.max(1, count)));
+    peakRms = Math.max(peakRms, rms.at(-1));
+  }
+  for (let frame = 0; frame < frames; frame++) {
+    const first = base.channels.ch5[frame] ?? base.channels.ch5.at(-1);
+    const second = base.channels.ch6[frame] ?? base.channels.ch6.at(-1);
+    const noise = base.channels.ch8[frame] ?? base.channels.ch8.at(-1);
+    const strength = peakRms ? rms[frame] / peakRms : 0;
+    const active = rms[frame] >= Math.max(0.0005, peakRms * 0.015);
+    const roughHz = 131072 / (2048 - first.frequency);
+    const lowHz = detectLowHz(samples, frame, roughHz);
+    const roughWave = bestWave(samples, frame, roughHz);
+    const firstHz = lowHz ?? (roughWave.score > 0.9 ? refinePeriodicHz(samples, frame, roughHz) : roughHz);
+    const independent = config.waveMode === 'independent' && lowHz === null
+      ? independentWaveHz(samples, frame, [firstHz, 131072 / (2048 - second.frequency)], config)
+      : null;
+    const waveHz = independent?.hz ?? firstHz;
+    const wave = waveHz === roughHz ? roughWave : bestWave(samples, frame, waveHz);
+    const firstVolume = first.volume || (active ? clamp(round(rms[frame] / 0.27 * 13), 1, 15) : 0);
+    const useWave = active && (lowHz !== null || wave.score >= config.waveFitThreshold);
+    const waveLevel = !useWave ? 0 : strength > 0.42 ? 1 : strength > 0.19 ? 2 : 3;
+    const primaryFrequency = register(firstHz);
+    const neighbors = [frame - 1, frame + 1].filter(index => index >= 0 && index < frames);
+    const secondStable = neighbors.some(index => {
+      const other = base.channels.ch6[index];
+      if (!other?.volume || !second.volume) return false;
+      const a = 131072 / (2048 - second.frequency);
+      const b = 131072 / (2048 - other.frequency);
+      return Math.abs(Math.log2(a / b)) < config.secondStability;
+    });
+    channels.ch7.push({ duration: 0, volume: waveLevel, envelope: wave.index,
+      frequency: clamp(round(2048 - 65536 / waveHz), 0, 2047) });
+    channels.ch5.push({ ...first, duration: 0, frequency: primaryFrequency,
+      volume: active && lowHz === null ? clamp(round(firstVolume * (useWave && !independent ? config.pulseWaveBlend : 1)), 0, 15) : 0 });
+    channels.ch6.push({ ...second, duration: 0,
+      volume: active && secondStable ? second.volume : 0 });
+    const flatness = config.noiseStrength
+      ? waveformWindow(samples, frame * FRAME_SAMPLES,
+        Math.min(samples.length, (frame + 3) * FRAME_SAMPLES)).flatness : 0;
+    const noiseFactor = clamp((flatness - config.noiseFlatnessStart) /
+      (config.noiseFlatnessFull - config.noiseFlatnessStart), 0, 1);
+    const fittedNoise = clamp(round(8 * rms[frame] / 0.3 * config.noiseStrength * noiseFactor), 0, 15);
+    channels.ch8.push({ ...noise, duration: 0,
+      frequency: config.noiseStrength ? config.noisePitch : noise.frequency,
+      volume: active ? (config.noiseStrength ? fittedNoise : noise.volume) : 0 });
+  }
+  for (const [key, kind] of [['ch5', 'square'], ['ch6', 'square'], ['ch7', 'wave'], ['ch8', 'noise']])
+    channels[key] = compactNotes(channels[key], kind);
+  let pan = null;
+  if (Number.isFinite(stereoBalance)) {
+    const balance = clamp(stereoBalance, 0, 1);
+    if (balance <= 0.1) pan = { left: 0, right: 7, route: 'right' };
+    else if (balance >= 0.9) pan = { left: 7, right: 0, route: 'left' };
+    else {
+      const louder = Math.max(balance, 1 - balance);
+      pan = { left: clamp(round(8 * balance / louder) - 1, 0, 7),
+        right: clamp(round(8 * (1 - balance) / louder) - 1, 0, 7), route: 'both' };
+    }
+  }
+  return {
+    channels, frames, sourceDuration: samples.length / RATE,
+    previewDuration: frames / FRAME_RATE, precise: true, pan,
+  };
+}
+
 export function makeAsm(project, sourceName = 'source.wav') {
   const label = project.label;
   if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(label)) throw new Error('Cry label must start with a letter and use letters, numbers, or underscores.');
+  const keys = project.precise
+    ? ['ch5', 'ch6', 'ch7', 'ch8'].filter(key => key === 'ch5' || project.channels[key]?.some(note => note.volume))
+    : ['ch5', 'ch6', 'ch8'];
   const lines = [
     '; Generated by Siren',
     `; Source: ${sourceName.replace(/[^A-Za-z0-9_. -]/g, '_')}`,
     '; Play with pitch 0, length 256.',
-    '; Approximation with two PSG square channels and PSG noise.',
-    '', `Cry_${label}:`, '\tchannel_count 3',
-    `\tchannel 5, Cry_${label}_Ch5`, `\tchannel 6, Cry_${label}_Ch6`,
-    `\tchannel 8, Cry_${label}_Ch8`, '',
+    keys.includes('ch7')
+      ? '; Stock PSG approximation using square, built-in wave and noise channels.'
+      : '; Approximation with two PSG square channels and PSG noise.',
+    '', `Cry_${label}:`, `\tchannel_count ${keys.length}`,
+    ...keys.map(key => `\tchannel ${key.slice(2)}, Cry_${label}_Ch${key.slice(2)}`), '',
   ];
-  for (const [key, kind] of [['ch5', 'square'], ['ch6', 'square'], ['ch8', 'noise']]) {
+  for (const [key, kind] of [['ch5', 'square'], ['ch6', 'square'], ['ch7', 'wave'], ['ch8', 'noise']]) {
+    if (!keys.includes(key)) continue;
     lines.push(`Cry_${label}_${key[0].toUpperCase()}${key.slice(1)}:`);
+    if (project.pan?.route === 'both' && key === 'ch5' &&
+        (project.pan.left !== 7 || project.pan.right !== 7))
+      lines.push(`\tvolume ${project.pan.left}, ${project.pan.right}`);
+    if (project.pan?.route === 'left') lines.push('\tforce_stereo_panning TRUE, FALSE');
+    if (project.pan?.route === 'right') lines.push('\tforce_stereo_panning FALSE, TRUE');
     let previousDuty = -1;
     for (const note of project.channels[key]) {
       validateNote(note, kind);
-      if (kind === 'square' && note.duty !== previousDuty) {
+      if (kind === 'square' && note.volume > 0 && note.duty !== previousDuty) {
         lines.push(`\tduty_cycle ${note.duty}`); previousDuty = note.duty;
       }
       const frequency = kind === 'square' && note.volume === 0 ? 0 : note.frequency;
-      lines.push(`\t${kind}_note ${note.duration}, ${note.volume}, ${note.envelope}, ${frequency}`);
+      lines.push(`\t${kind === 'noise' ? 'noise' : 'square'}_note ${note.duration}, ${note.volume}, ${note.envelope}, ${frequency}`);
     }
     lines.push('\tsound_ret', '');
   }
@@ -435,7 +678,8 @@ export function makeAsm(project, sourceName = 'source.wav') {
 
 export function validateNote(note, kind) {
   for (const [name, low, high] of [
-    ['duration', 0, 255], ['volume', 0, 15], ['envelope', -7, 8],
+    ['duration', 0, 255], ['volume', 0, kind === 'wave' ? 3 : 15],
+    ['envelope', kind === 'wave' ? 0 : -7, kind === 'wave' ? 9 : 8],
     ['frequency', 0, kind === 'noise' ? 255 : 2047],
     ...(kind === 'square' ? [['duty', 0, 3]] : []),
   ]) {
