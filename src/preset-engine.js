@@ -1,5 +1,4 @@
 import { analyzeWaveform, convert, prepareWav, readWav, waveformWindow } from './converter.js';
-import { applyModifier, suggestModifier } from './modifier-engine.js';
 import { renderPreview } from './preview.js';
 import { scorePrecisePreview } from './quality.js';
 
@@ -11,7 +10,7 @@ export function suggestPreset(samples) {
   else if (features.peakHz < 300 || features.lowShare > 0.08) id = 'roar';
   else if (features.flatness > 0.74) id = 'textured';
   else if (features.peakHz > 1100) id = 'bright';
-  return { id, modifierId: suggestModifier(samples, features).id, features };
+  return { id, features };
 }
 
 function signature(samples) {
@@ -45,8 +44,8 @@ function difference(source, rendered) {
   return total / Math.max(count, 1);
 }
 
-function renderDifference(samples, reference, options, modifierId) {
-  const result = applyModifier(convert(samples, options), modifierId);
+function renderDifference(samples, reference, options) {
+  const result = convert(samples, options);
   const synthesized = readWav(renderPreview(result));
   const prepared = prepareWav(synthesized);
   return { result, score: difference(reference, signature(prepared.samples)) };
@@ -76,11 +75,7 @@ export function fitPrecisePreset(samples, stereoBalance = null, onProgress = () 
   return best;
 }
 
-export function fitAutoPreset(samples, profiles, autoPreset, modifierId = 'none', onProgress = () => {}) {
-  if (typeof modifierId === 'function') {
-    onProgress = modifierId;
-    modifierId = 'none';
-  }
+export function fitAutoPreset(samples, profiles, autoPreset, onProgress = () => {}) {
   const reference = signature(samples);
   let best = null;
   let tried = 0;
@@ -89,11 +84,9 @@ export function fitAutoPreset(samples, profiles, autoPreset, modifierId = 'none'
     let candidate;
     if (options.precise) {
       const fitted = fitPrecisePreset(samples);
-      const result = applyModifier(fitted.result, modifierId);
-      const preview = renderPreview(result);
-      candidate = { result,
-        score: difference(reference, signature(prepareWav(readWav(preview)).samples)) };
-    } else candidate = renderDifference(samples, reference, options, modifierId);
+      candidate = { result: fitted.result,
+        score: difference(reference, signature(prepareWav(readWav(fitted.preview)).samples)) };
+    } else candidate = renderDifference(samples, reference, options);
     tried++;
     onProgress(tried, total);
     if (!best || candidate.score < best.score) best = { ...candidate, options, basis };

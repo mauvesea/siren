@@ -72,21 +72,36 @@
 
           <section class="settings-section" aria-labelledby="conversion-heading">
             <h2 id="conversion-heading">Conversion</h2>
-            <p class="section-description">The recommended preset and modifier are selected automatically. Switch either at any time to compare results.</p>
+            <p class="section-description">The recommended preset is selected automatically. Switch it at any time to compare results.</p>
             <div class="settings-card">
               <label class="settings-row" for="preset-select">
                 <div class="row-icon"><span class="fluent-icon" aria-hidden="true">&#xE9E9;</span></div>
                 <div class="row-copy"><strong>Preset</strong></div>
                 <select id="preset-select"></select>
               </label>
-              <label class="settings-row" for="modifier-select">
+              <label class="settings-row" for="voice-pitch-input">
                 <div class="row-icon"><span class="fluent-icon" aria-hidden="true">&#xE790;</span></div>
-                <div class="row-copy"><strong>Modifier</strong><span>Changes resonance, pitch, weight, or contour</span></div>
-                <select id="modifier-select"></select>
+                <div class="row-copy"><strong>Pitch</strong></div>
+                <div class="voice-range-control"><span>Low</span><input id="voice-pitch-input" type="range" min="-100" max="100" step="1" value="0"><span>High</span></div>
+              </label>
+              <label class="settings-row" for="voice-resonance-input">
+                <div class="row-icon"><span class="fluent-icon" aria-hidden="true">&#xE790;</span></div>
+                <div class="row-copy"><strong>Resonance</strong></div>
+                <div class="voice-range-control"><span>Dark</span><input id="voice-resonance-input" type="range" min="-100" max="100" step="1" value="0"><span>Bright</span></div>
+              </label>
+              <label class="settings-row" for="voice-weight-input">
+                <div class="row-icon"><span class="fluent-icon" aria-hidden="true">&#xE790;</span></div>
+                <div class="row-copy"><strong>Weight</strong></div>
+                <div class="voice-range-control"><span>Light</span><input id="voice-weight-input" type="range" min="-100" max="100" step="1" value="0"><span>Heavy</span></div>
+              </label>
+              <label class="settings-row" for="voice-intonation-input">
+                <div class="row-icon"><span class="fluent-icon" aria-hidden="true">&#xE790;</span></div>
+                <div class="row-copy"><strong>Intonation</strong></div>
+                <div class="voice-range-control"><span>Shallow</span><input id="voice-intonation-input" type="range" min="-100" max="100" step="1" value="0"><span>Wide</span></div>
               </label>
               <label class="settings-row" for="volume-input">
                 <div class="row-icon"><span class="fluent-icon" aria-hidden="true">&#xE767;</span></div>
-                <div class="row-copy"><strong>Volume</strong><span>Detected from the cry · 0% to hardware maximum</span></div>
+                <div class="row-copy"><strong>Volume</strong></div>
                 <div class="range-control">
                   <input id="volume-input" type="range" min="0" max="100" step="1" value="0">
                   <output id="volume-value" for="volume-input">0%</output>
@@ -94,7 +109,7 @@
               </label>
               <div class="settings-row">
                 <div class="row-icon"><span class="fluent-icon" aria-hidden="true">&#xE9D9;</span></div>
-                <div class="row-copy"><strong>Fades</strong><span>Stock volume steps over the first or last 25%</span></div>
+                <div class="row-copy"><strong>Fades</strong></div>
                 <div class="effect-buttons">
                   <button class="toggle-button" id="fade-in-button" type="button" aria-pressed="false">Fade In</button>
                   <button class="toggle-button" id="fade-out-button" type="button" aria-pressed="false">Fade Out</button>

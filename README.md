@@ -17,9 +17,10 @@ This tool is AI assisted.
 ## Using the app
 
 Select **File Converter** at the top of the window, then choose or drop a WAV.
-The application prepares the audio internally, recommends a preset and modifier, and
+The application prepares the audio internally, recommends a preset, and
 synthesizes a converted sound. Listen to the original and converted versions
-in Sound Check, choose another preset or modifier to compare, adjust **Volume**, and add
+in Sound Check, choose another preset or adjust the voice controls to compare,
+set **Volume**, and add
 an optional **Fade In** or **Fade Out**, then select **Export** to
 create an `.asm` file beside the source WAV.
 
@@ -99,13 +100,10 @@ Every profile is a readable JSON file in [`Presets`](Presets). The **Auto**
 preset searches the available profiles for a close match. The menu sorts
 profiles alphabetically by name, with **Auto** first and **Precise** last.
 
-Modifiers are independent of presets and work with every profile. **None**
-keeps the regular preset tone. **Dark** and **Bright** adjust pulse resonance;
-**Low** and **High** transpose tonal channels; **Heavy** and **Light**
-adjust supporting-layer weight; and **Wide** and **Shallow** expand or compress
-the pitch contour. Noise pitch is not transposed. Siren recommends both a base
-preset and a modifier when a WAV is opened, while leaving **None** as the
-initial modifier before a file is analyzed.
+Four independent voice controls work with every profile: Pitch runs from Low
+to High, Resonance from Dark to Bright, Weight from Light to Heavy, and
+Intonation from Shallow to Wide. The controls can be combined and start at
+their neutral midpoint whenever a WAV is opened. Noise pitch is not transposed.
 
 **Precise** compares two reconstructions at each playable Game Boy frame and
 keeps the closer measured fit. It uses pokecrystal's fixed wave patterns,
@@ -117,7 +115,7 @@ cannot preserve arbitrary PCM samples, sample rate, or bit depth. See the
 **Bulky** uses stable duty-cycle patterns on both pulse channels, the wave
 channel for low body, and longer source-matched noise phrases with hardware
 volume envelopes. It is a full conversion profile and can be combined with
-any modifier, including the separate **Heavy** modifier.
+any combination of voice controls.
 
 See [`Presets/README.md`](Presets/README.md) for fields and limits. In a source
 checkout, add files to `Presets/`. For an AppImage, add a `Presets` folder beside

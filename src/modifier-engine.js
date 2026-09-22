@@ -1,18 +1,10 @@
-import { analyzeWaveform } from './converter.js';
+export const DEFAULT_VOICE_CONTROLS = Object.freeze({
+  pitch: 0,
+  resonance: 0,
+  weight: 0,
+  intonation: 0,
+});
 
-export const MODIFIERS = Object.freeze([
-  { id: 'none', name: 'None', description: 'Keeps the preset\'s original tone.' },
-  { id: 'dark', name: 'Dark', description: 'Rounds the pulse resonance for a darker voice.' },
-  { id: 'bright', name: 'Bright', description: 'Narrows the pulse resonance for a brighter voice.' },
-  { id: 'low', name: 'Low', description: 'Moves tonal voices down one octave.' },
-  { id: 'high', name: 'High', description: 'Moves tonal voices up one octave.' },
-  { id: 'heavy', name: 'Heavy', description: 'Strengthens supporting tonal and noise layers.' },
-  { id: 'light', name: 'Light', description: 'Pulls back supporting layers for a lighter voice.' },
-  { id: 'wide', name: 'Wide', description: 'Expands the source pitch contour.' },
-  { id: 'shallow', name: 'Shallow', description: 'Compresses the source pitch contour.' },
-]);
-
-const MODIFIER_IDS = new Set(MODIFIERS.map(modifier => modifier.id));
 const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
 
 function cloneProject(project) {
@@ -47,12 +39,14 @@ function transpose(project, semitones) {
   }
 }
 
-function changeResonance(project, dark) {
-  const map = dark ? [1, 2, 2, 2] : [0, 0, 1, 1];
+function changeResonance(project, amount) {
+  const map = amount < 0 ? [1, 2, 2, 2] : [0, 0, 1, 1];
+  const strength = Math.abs(amount);
+  const adjusted = duty => clamp(Math.round(duty + (map[duty] - duty) * strength), 0, 3);
   for (const channel of ['ch5', 'ch6']) {
     for (const note of project.channels[channel] ?? []) {
-      if (note.duty !== undefined) note.duty = map[note.duty];
-      if (note.dutyPattern) note.dutyPattern = note.dutyPattern.map(duty => map[duty]);
+      if (note.duty !== undefined) note.duty = adjusted(note.duty);
+      if (note.dutyPattern) note.dutyPattern = note.dutyPattern.map(adjusted);
     }
   }
 }
@@ -61,14 +55,14 @@ function scaleVolume(note, factor, maximum = 15) {
   if (note.volume) note.volume = clamp(Math.round(note.volume * factor), 1, maximum);
 }
 
-function changeWeight(project, heavy) {
-  const supportFactor = heavy ? 1.35 : 0.55;
-  const noiseFactor = heavy ? 1.25 : 0.45;
+function changeWeight(project, amount) {
+  const supportFactor = amount >= 0 ? 1 + 0.35 * amount : 1 + 0.45 * amount;
+  const noiseFactor = amount >= 0 ? 1 + 0.25 * amount : 1 + 0.55 * amount;
   for (const note of project.channels.ch6 ?? []) scaleVolume(note, supportFactor);
   for (const note of project.channels.ch8 ?? []) scaleVolume(note, noiseFactor);
   // Game Boy wave volume uses 1, 2, and 3 for 100%, 50%, and 25%.
   for (const note of project.channels.ch7 ?? []) {
-    if (note.volume) note.volume = heavy ? Math.max(1, note.volume - 1) : Math.min(3, note.volume + 1);
+    if (note.volume) note.volume = clamp(Math.round(note.volume - amount), 1, 3);
   }
 }
 
@@ -99,35 +93,21 @@ function changeContour(project, amount) {
   }
 }
 
-export function applyModifier(project, modifierId = 'none') {
-  if (!MODIFIER_IDS.has(modifierId)) throw new Error(`Unknown modifier “${modifierId}”.`);
-  const result = cloneProject(project);
-  if (modifierId === 'dark') changeResonance(result, true);
-  if (modifierId === 'bright') changeResonance(result, false);
-  if (modifierId === 'low') transpose(result, -12);
-  if (modifierId === 'high') transpose(result, 12);
-  if (modifierId === 'heavy') changeWeight(result, true);
-  if (modifierId === 'light') changeWeight(result, false);
-  if (modifierId === 'wide') changeContour(result, 1.5);
-  if (modifierId === 'shallow') changeContour(result, 0.55);
-  result.modifier = modifierId;
-  return result;
+function controlValue(controls, name) {
+  const value = controls?.[name] ?? 0;
+  if (!Number.isFinite(value)) throw new Error(`${name} must be a finite number.`);
+  return clamp(value, -1, 1);
 }
 
-export function suggestModifier(samples, suppliedFeatures = null) {
-  const features = suppliedFeatures ?? analyzeWaveform(samples);
-  if (!features.peakHz) return { id: 'none', features };
-  const candidates = [
-    { id: 'low', score: (260 - features.peakHz) / 100 },
-    { id: 'high', score: (features.peakHz - 1050) / 500 },
-    { id: 'heavy', score: (features.lowShare - 0.08) / 0.12 },
-    { id: 'light', score: (0.004 - features.lowShare) / 0.006 },
-    { id: 'dark', score: (0.035 - features.flatness) / 0.04 },
-    { id: 'bright', score: (features.flatness - 0.68) / 0.22 },
-    { id: 'wide', score: (features.pitchJitter - 0.16) / 0.22 },
-    { id: 'shallow', score: (0.008 - features.pitchJitter) / 0.014 },
-  ];
-  const best = candidates.reduce((winner, candidate) =>
-    candidate.score > winner.score ? candidate : winner, { id: 'none', score: 0.5 });
-  return { id: best.id, features };
+export function applyVoiceControls(project, controls = DEFAULT_VOICE_CONTROLS) {
+  const result = cloneProject(project);
+  const normalized = Object.fromEntries(Object.keys(DEFAULT_VOICE_CONTROLS)
+    .map(name => [name, controlValue(controls, name)]));
+  if (normalized.pitch) transpose(result, 12 * normalized.pitch);
+  if (normalized.resonance) changeResonance(result, normalized.resonance);
+  if (normalized.weight) changeWeight(result, normalized.weight);
+  if (normalized.intonation) changeContour(result,
+    normalized.intonation >= 0 ? 1 + 0.5 * normalized.intonation : 1 + 0.45 * normalized.intonation);
+  result.voiceControls = normalized;
+  return result;
 }

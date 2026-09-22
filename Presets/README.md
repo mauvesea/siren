@@ -8,10 +8,9 @@ Copy an existing file, give it a unique lowercase `id`, change its `name`, and
 adjust only the options you need. Omitted options retain the converter defaults.
 
 Preset names should describe the conversion character without a modifier
-prefix. The separate Modifier menu can apply Dark, Bright, Low, High, Heavy,
-Light, Wide, or Shallow to any bundled or custom profile. The modifiers
-are built into the shared conversion engine rather than duplicated as preset
-JSON files.
+prefix. The separate Pitch, Resonance, Weight, and Intonation controls can be
+combined with any bundled or custom profile. These controls are built into the
+shared conversion engine rather than duplicated as preset JSON files.
 
 Supported profile options:
 

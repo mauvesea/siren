@@ -4,7 +4,7 @@ import GLib from 'gi://GLib';
 import { applyConversionEffects, convert, encodeWav, makeAsm, makePlaybackWav, prepareWav, readWav } from '../../src/converter.js';
 import { parseCryAsm } from '../../src/cry-asm.js';
 import { fitAutoPreset, fitPrecisePreset, suggestPreset } from '../../src/preset-engine.js';
-import { applyModifier, MODIFIERS } from '../../src/modifier-engine.js';
+import { applyVoiceControls, DEFAULT_VOICE_CONTROLS } from '../../src/modifier-engine.js';
 import { loadPresets } from '../../src/preset-loader.js';
 import { renderPreview } from '../../src/preview.js';
 
@@ -50,9 +50,8 @@ assert(presets.every(preset => !preset.id.startsWith('deep_') && !preset.id.star
   'Prefixed presets must be represented by modifiers instead.');
 assert(presets.every(preset => !/^(Bass \(|Deep )/.test(preset.name)),
   'Bundled preset names must not contain baked-in modifiers.');
-assert(JSON.stringify(MODIFIERS.map(modifier => modifier.id)) ===
-  JSON.stringify(['none', 'dark', 'bright', 'low', 'high', 'heavy', 'light', 'wide', 'shallow']),
-  'Modifier choices changed.');
+assert(Object.values(DEFAULT_VOICE_CONTROLS).every(value => value === 0),
+  'Voice controls must default to their neutral midpoint.');
 assert(Boolean(autoPreset), 'Expected the Auto preset.');
 assert(JSON.stringify(autoPreset.search.noiseGainFactors) === JSON.stringify([0, 0.5, 1.5, 2.5]),
   'Auto noise gain search changed.');
@@ -103,36 +102,39 @@ assert(profiles.some(preset => preset.id === suggestion.id),
   'Automatic recommendation should choose an available profile.');
 assert(Number.isFinite(suggestion.features.peakHz) && suggestion.features.peakHz > 0,
   'Automatic recommendation should analyze the WAV samples.');
-assert(MODIFIERS.some(modifier => modifier.id === suggestion.modifierId),
-  'Automatic recommendation should choose an available modifier.');
+assert(!('modifierId' in suggestion), 'Automatic recommendation must not guess voice controls.');
 const tone = hz => Float64Array.from({ length: 17 * 176 },
   (_, i) => 0.5 * Math.sin(2 * Math.PI * hz * i / rate));
 assert(suggestPreset(tone(120)).id !== suggestPreset(tone(1400)).id,
   'Automatic recommendation should respond to the WAV spectrum.');
 
 const shortSamples = samples.subarray(0, 5 * 176);
-const fitted = fitAutoPreset(shortSamples, profiles, autoPreset, 'low');
+const fitted = fitAutoPreset(shortSamples, profiles, autoPreset);
 assert(Number.isFinite(fitted.score), 'Auto did not produce a finite match score.');
 assert(profiles.some(preset => preset.id === fitted.basis), 'Auto chose an unknown profile.');
 assert(readWav(renderPreview(fitted.result)).rate === 44100, 'Auto preview is not playable.');
-assert(fitted.result.modifier === 'low', 'Auto should apply the selected modifier.');
 
 const regular = convert(tone(440), cleanPreset.options);
-const low = applyModifier(regular, 'low');
-const high = applyModifier(regular, 'high');
+const neutral = applyVoiceControls(regular);
+const low = applyVoiceControls(regular, { pitch: -1 });
+const high = applyVoiceControls(regular, { pitch: 1 });
+const raisedHalfway = applyVoiceControls(regular, { pitch: 0.5 });
 const firstHz = result => 131072 / (2048 - result.channels.ch5.find(note => note.volume).frequency);
 assert(Math.abs(firstHz(low) / firstHz(regular) - 0.5) < 0.03,
   'Low should transpose tonal voices down one octave.');
 assert(Math.abs(firstHz(high) / firstHz(regular) - 2) < 0.06,
   'High should transpose tonal voices up one octave.');
-const dark = applyModifier(regular, 'dark');
-const bright = applyModifier(regular, 'bright');
+assert(Math.abs(firstHz(raisedHalfway) / firstHz(regular) - Math.sqrt(2)) < 0.04,
+  'Intermediate pitch values should provide proportional fine tuning.');
+assert(firstHz(neutral) === firstHz(regular), 'Neutral controls must not change pitch.');
+const dark = applyVoiceControls(regular, { resonance: -1 });
+const bright = applyVoiceControls(regular, { resonance: 1 });
 assert(dark.channels.ch5.every(note => note.duty === undefined || note.duty >= 1),
   'Dark should avoid the thinnest pulse resonance.');
 assert(bright.channels.ch5.every(note => note.duty === undefined || note.duty <= 1),
   'Bright should favor narrow pulse resonance.');
-const heavy = applyModifier(regular, 'heavy');
-const light = applyModifier(regular, 'light');
+const heavy = applyVoiceControls(regular, { weight: 1 });
+const light = applyVoiceControls(regular, { weight: -1 });
 assert(heavy.channels.ch6.reduce((sum, note) => sum + note.volume, 0) >=
   regular.channels.ch6.reduce((sum, note) => sum + note.volume, 0),
   'Heavy should strengthen the supporting pulse layer.');
@@ -151,12 +153,13 @@ const contourRatio = result => {
   const notes = result.channels.ch5;
   return (131072 / (2048 - notes[1].frequency)) / (131072 / (2048 - notes[0].frequency));
 };
-assert(contourRatio(applyModifier(contour, 'wide')) > contourRatio(contour),
+assert(contourRatio(applyVoiceControls(contour, { intonation: 1 })) > contourRatio(contour),
   'Wide should expand the pitch contour.');
-assert(contourRatio(applyModifier(contour, 'shallow')) < contourRatio(contour),
+assert(contourRatio(applyVoiceControls(contour, { intonation: -1 })) < contourRatio(contour),
   'Shallow should compress the pitch contour.');
-for (const modifier of MODIFIERS)
-  parseCryAsm(makeAsm({ ...applyModifier(regular, modifier.id), label: 'Modified' }));
+parseCryAsm(makeAsm({ ...applyVoiceControls(regular, {
+  pitch: 0.35, resonance: -0.6, weight: 0.4, intonation: 0.75,
+}), label: 'Modified' }));
 
 const precise = fitPrecisePreset(shortSamples);
 assert(Number.isFinite(precise.score) && readWav(precise.preview).rate === 44100,

@@ -7,7 +7,7 @@ import test from 'node:test';
 import { applyConversionEffects, convert, detectConversionVolume, encodeWav, makeAsm, prepareWav, readWav, suggestedLabel } from '../../src/converter.js';
 import { applyCryParameters, parseCryAsm } from '../../src/cry-asm.js';
 import { fitAutoPreset, suggestPreset } from '../../src/preset-engine.js';
-import { applyModifier, MODIFIERS } from '../../src/modifier-engine.js';
+import { applyVoiceControls, DEFAULT_VOICE_CONTROLS } from '../../src/modifier-engine.js';
 import { renderPreview } from '../../src/preview.js';
 import { parsePresetDirectories } from '../../windows/preset-schema.js';
 
@@ -35,8 +35,7 @@ test('Windows uses the shared converter and preview behavior', async () => {
   assert.equal(presets.find(preset => preset.id === 'bulky')?.options.tracking, 'bulky');
   assert.ok(presets.every(preset => !preset.id.startsWith('bass_') && !preset.id.startsWith('deep_')));
   assert.ok(presets.every(preset => !/^(Bass \(|Deep )/.test(preset.name)));
-  assert.deepEqual(MODIFIERS.map(modifier => modifier.name),
-    ['None', 'Dark', 'Bright', 'Low', 'High', 'Heavy', 'Light', 'Wide', 'Shallow']);
+  assert.deepEqual(DEFAULT_VOICE_CONTROLS, { pitch: 0, resonance: 0, weight: 0, intonation: 0 });
   assert.equal(presets[0].id, 'auto');
   assert.equal(presets.at(-1).id, 'precise');
   assert.ok(presets.slice(1, -1).every((preset, index, middle) =>
@@ -60,10 +59,10 @@ test('Windows uses the shared converter and preview behavior', async () => {
   assert.ok(makeAsm(project, 'two_tones.wav').includes(`Cry_${project.label}_Ch8:`));
   assert.equal(readWav(renderPreview(project)).rate, 44100);
   assert.ok(profiles.some(preset => preset.id === suggestPreset(source.samples).id));
-  assert.ok(MODIFIERS.some(modifier => modifier.id === suggestPreset(source.samples).modifierId));
+  assert.ok(!('modifierId' in suggestPreset(source.samples)));
 
-  const low = applyModifier(project, 'low');
-  assert.equal(low.modifier, 'low');
+  const low = applyVoiceControls(project, { pitch: -1 });
+  assert.equal(low.voiceControls.pitch, -1);
   assert.notEqual(low.channels.ch5[0].frequency, project.channels.ch5[0].frequency);
 
   const fitted = fitAutoPreset(samples.subarray(0, 5 * 176), profiles, auto);
@@ -132,6 +131,10 @@ test('the Windows surface declares system theming and accessibility hooks', asyn
   assert.match(css, /Segoe UI Variable/);
   assert.match(html, /aria-live="polite"/);
   assert.match(html, /aria-label="Main navigation"/);
+  for (const id of ['voice-pitch-input', 'voice-resonance-input', 'voice-weight-input', 'voice-intonation-input'])
+    assert.match(html, new RegExp(`id="${id}"[^>]+min="-100"[^>]+max="100"[^>]+value="0"`));
+  assert.doesNotMatch(html, /modifier-select/);
+  assert.doesNotMatch(html, /Detected from the cry|Stock volume steps/);
 });
 
 test('the Windows window is revealed after loading if ready-to-show is missed', async () => {

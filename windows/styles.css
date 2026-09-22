@@ -210,6 +210,8 @@ select:focus, input[type="number"]:focus { border-bottom: 2px solid var(--accent
 input[type="number"] { min-width: 128px; width: 128px; padding-right: 5px; font-variant-numeric: tabular-nums; }
 .export-button { width: 100%; min-height: 36px; }
 .range-control { display: flex; align-items: center; gap: 10px; min-width: 230px; }
+.voice-range-control { display: grid; grid-template-columns: 60px 180px 48px; align-items: center; gap: 8px; min-width: 304px; color: var(--text-secondary); font-size: 12px; }
+.voice-range-control span:first-child { text-align: right; }
 input[type="range"] { width: 180px; accent-color: var(--accent); }
 .range-control output { min-width: 42px; color: var(--text-secondary); font-variant-numeric: tabular-nums; text-align: right; }
 .effect-buttons { display: flex; gap: 6px; }
@@ -258,7 +260,7 @@ input[type="range"] { width: 180px; accent-color: var(--accent); }
   .page { width: calc(100% - 24px); padding-top: 24px; }
   .settings-row { flex-wrap: wrap; }
   .row-copy { min-width: calc(100% - 50px); }
-  select, input[type="number"], .range-control, .effect-buttons { margin-left: 46px; flex: 1; }
+  select, input[type="number"], .range-control, .voice-range-control, .effect-buttons { margin-left: 46px; flex: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -3,7 +3,7 @@ import {
 } from '../src/converter.js';
 import { applyCryParameters, parseCryAsm, PITCH_MIN, PITCH_MAX, LENGTH_MIN, LENGTH_MAX } from '../src/cry-asm.js';
 import { fitAutoPreset, fitPrecisePreset, suggestPreset } from '../src/preset-engine.js';
-import { applyModifier, MODIFIERS } from '../src/modifier-engine.js';
+import { applyVoiceControls } from '../src/modifier-engine.js';
 import { renderPreview } from '../src/preview.js';
 import { parsePresetDirectories } from './preset-schema.js';
 
@@ -18,6 +18,7 @@ const state = {
   preparedSamples: null,
   project: null,
   baseProject: null,
+  rawProject: null,
   asmText: null,
   cry: null,
   conversionSerial: 0,
@@ -25,9 +26,10 @@ const state = {
   validationTimer: 0,
   resumeValidation: false,
   ignorePresetChange: false,
-  ignoreModifierChange: false,
   ignoreCryChange: false,
   effectTimer: 0,
+  voiceTimer: 0,
+  conversionDetail: '',
 };
 
 function bytesToArrayBuffer(bytes) {
@@ -138,7 +140,8 @@ function setPage(name) {
 function setConversionBusy(busy, message = '') {
   $('#conversion-progress').hidden = !busy;
   $('#preset-select').disabled = busy;
-  $('#modifier-select').disabled = busy;
+  for (const id of ['voice-pitch-input', 'voice-resonance-input', 'voice-weight-input', 'voice-intonation-input'])
+    $(`#${id}`).disabled = busy;
   $('#volume-input').disabled = busy;
   $('#fade-in-button').disabled = busy;
   $('#fade-out-button').disabled = busy;
@@ -185,6 +188,7 @@ function loadWav(file) {
     state.stereoBalance = prepared.stereoBalance;
     state.project = null;
     state.baseProject = null;
+    state.rawProject = null;
     convertedPlayer.clear();
     originalPlayer.setBuffer(buffer);
     $('#source-name').textContent = file.name;
@@ -199,20 +203,22 @@ function loadWav(file) {
     state.ignorePresetChange = true;
     $('#preset-select').selectedIndex = selected;
     state.ignorePresetChange = false;
-    const modifierIndex = Math.max(0, MODIFIERS.findIndex(modifier => modifier.id === suggestion.modifierId));
-    state.ignoreModifierChange = true;
-    $('#modifier-select').selectedIndex = modifierIndex;
-    state.ignoreModifierChange = false;
+    for (const id of ['voice-pitch-input', 'voice-resonance-input', 'voice-weight-input', 'voice-intonation-input'])
+      $(`#${id}`).value = '0';
     const preset = state.presets[selected];
-    beginConversion(preset, MODIFIERS[modifierIndex]);
+    beginConversion(preset);
   } catch (error) { showToast(error.message); }
 }
 
-function beginConversion(preset, modifier = MODIFIERS[$('#modifier-select').selectedIndex]) {
+function beginConversion(preset) {
   const serial = ++state.conversionSerial;
   if (state.effectTimer) {
     window.clearTimeout(state.effectTimer);
     state.effectTimer = 0;
+  }
+  if (state.voiceTimer) {
+    window.clearTimeout(state.voiceTimer);
+    state.voiceTimer = 0;
   }
   convertedPlayer.clear();
   setConversionBusy(true, preset.type === 'auto' ? 'Testing conversion profiles…' :
@@ -221,9 +227,9 @@ function beginConversion(preset, modifier = MODIFIERS[$('#modifier-select').sele
     if (serial !== state.conversionSerial) return;
     try {
       let result, preview;
-      let detail = modifier.id === 'none' ? preset.name : `${modifier.name} · ${preset.name}`;
+      let detail = preset.name;
       if (preset.type === 'auto') {
-        const fitted = fitAutoPreset(state.preparedSamples, state.profiles, preset, modifier.id, (current, total) => {
+        const fitted = fitAutoPreset(state.preparedSamples, state.profiles, preset, (current, total) => {
           $('#converted-detail').textContent = `Testing profile ${current} of ${total}…`;
         });
         result = fitted.result;
@@ -231,22 +237,20 @@ function beginConversion(preset, modifier = MODIFIERS[$('#modifier-select').sele
         detail = `${detail} · based on ${basis?.name ?? fitted.basis}`;
       } else if (preset.options?.precise) {
         const fitted = fitPrecisePreset(state.preparedSamples, state.stereoBalance);
-        result = applyModifier(fitted.result, modifier.id);
-        preview = modifier.id === 'none' ? fitted.preview : renderPreview(result);
+        result = fitted.result;
+        preview = fitted.preview;
       } else {
-        result = applyModifier(convert(state.preparedSamples,
-          { ...preset.options, stereoBalance: state.stereoBalance }), modifier.id);
+        result = convert(state.preparedSamples, { ...preset.options, stereoBalance: state.stereoBalance });
       }
       if (serial !== state.conversionSerial) return;
-      state.baseProject = { ...result, label: suggestedLabel(state.sourceName) };
-      $('#volume-input').value = String(detectConversionVolume(state.baseProject));
-      $('#volume-value').textContent = `${$('#volume-input').value}%`;
-      applyEffects(preview);
-      $('#converted-detail').textContent = `${detail} · ${formatDuration(result.previewDuration ?? result.sourceDuration)}`;
+      state.rawProject = { ...result, label: suggestedLabel(state.sourceName) };
+      state.conversionDetail = detail;
+      applyVoiceSettings(preview);
       setConversionBusy(false);
     } catch (error) {
       state.project = null;
       state.baseProject = null;
+      state.rawProject = null;
       setConversionBusy(false, 'Conversion failed');
       showToast(error.message);
     }
@@ -259,6 +263,37 @@ function effectOptions() {
     fadeIn: $('#fade-in-button').getAttribute('aria-pressed') === 'true',
     fadeOut: $('#fade-out-button').getAttribute('aria-pressed') === 'true',
   };
+}
+
+function voiceOptions() {
+  return {
+    pitch: Number($('#voice-pitch-input').value) / 100,
+    resonance: Number($('#voice-resonance-input').value) / 100,
+    weight: Number($('#voice-weight-input').value) / 100,
+    intonation: Number($('#voice-intonation-input').value) / 100,
+  };
+}
+
+function applyVoiceSettings(defaultPreview = null) {
+  if (!state.rawProject) return;
+  const options = voiceOptions();
+  state.baseProject = applyVoiceControls(state.rawProject, options);
+  $('#volume-input').value = String(detectConversionVolume(state.baseProject));
+  $('#volume-value').textContent = `${$('#volume-input').value}%`;
+  const neutral = Object.values(options).every(value => value === 0);
+  applyEffects(neutral ? defaultPreview : null);
+  $('#converted-detail').textContent = `${state.conversionDetail} · ${formatDuration(
+    state.baseProject.previewDuration ?? state.baseProject.sourceDuration)}`;
+}
+
+function scheduleVoiceControls() {
+  if (!state.rawProject) return;
+  if (state.voiceTimer) window.clearTimeout(state.voiceTimer);
+  state.voiceTimer = window.setTimeout(() => {
+    state.voiceTimer = 0;
+    try { applyVoiceSettings(); }
+    catch (error) { showToast(error.message); }
+  }, 100);
 }
 
 function applyEffects(defaultPreview = null) {
@@ -367,7 +402,6 @@ async function initializePresets() {
     state.profiles = state.presets.filter(preset => preset.type === 'profile');
     const select = $('#preset-select');
     select.replaceChildren(...state.presets.map(preset => new Option(preset.name, preset.id)));
-    $('#modifier-select').replaceChildren(...MODIFIERS.map(modifier => new Option(modifier.name, modifier.id)));
   } catch (error) {
     showToast(error.message);
     $('#converter-open').disabled = true;
@@ -388,13 +422,10 @@ $$('#about-dialog [data-url]').forEach(button => button.addEventListener('click'
 $('#preset-select').addEventListener('change', event => {
   if (state.ignorePresetChange || !state.sourcePath) return;
   const preset = state.presets[event.target.selectedIndex];
-  beginConversion(preset, MODIFIERS[$('#modifier-select').selectedIndex]);
+  beginConversion(preset);
 });
-$('#modifier-select').addEventListener('change', event => {
-  if (state.ignoreModifierChange || !state.sourcePath) return;
-  const preset = state.presets[$('#preset-select').selectedIndex];
-  beginConversion(preset, MODIFIERS[event.target.selectedIndex]);
-});
+for (const id of ['voice-pitch-input', 'voice-resonance-input', 'voice-weight-input', 'voice-intonation-input'])
+  $(`#${id}`).addEventListener('input', scheduleVoiceControls);
 $('#volume-input').addEventListener('input', scheduleEffects);
 $('#fade-in-button').addEventListener('click', event => toggleEffect(event.currentTarget));
 $('#fade-out-button').addEventListener('click', event => toggleEffect(event.currentTarget));
@@ -444,6 +475,7 @@ document.addEventListener('drop', async event => {
 
 window.addEventListener('beforeunload', () => {
   if (state.validationTimer) window.clearTimeout(state.validationTimer);
+  if (state.voiceTimer) window.clearTimeout(state.voiceTimer);
   for (const player of players) player.clear();
 });
 window.siren.onOpenPath(loadPath);

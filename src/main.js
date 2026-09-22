@@ -10,7 +10,7 @@ import Gtk from 'gi://Gtk?version=4.0';
 
 import { applyConversionEffects, detectConversionVolume, MAX_BYTES, MAX_SECONDS, makeAsm, makePlaybackWav, prepareWav, readWav, suggestedLabel, convert } from './converter.js';
 import { fitAutoPreset, fitPrecisePreset, suggestPreset } from './preset-engine.js';
-import { applyModifier, MODIFIERS } from './modifier-engine.js';
+import { applyVoiceControls } from './modifier-engine.js';
 import { loadPresetDirectories } from './preset-loader.js';
 import { renderPreview } from './preview.js';
 import { applyCryParameters, parseCryAsm, PITCH_MIN, PITCH_MAX, LENGTH_MIN, LENGTH_MAX } from './cry-asm.js';
@@ -93,6 +93,7 @@ class SirenWindow {
     this.sourceFile = null;
     this.project = null;
     this.baseProject = null;
+    this.rawProject = null;
     this.previewFile = null;
     this.originalPreviewFile = null;
     this.validationFile = null;
@@ -102,9 +103,10 @@ class SirenWindow {
     this.resumeValidation = false;
     this.conversionSerial = 0;
     this.effectTimer = 0;
+    this.voiceTimer = 0;
     this.ignoreEffectChanges = false;
     this.ignorePresetChanges = false;
-    this.ignoreModifierChanges = false;
+    this.ignoreVoiceChanges = false;
 
     let presetDirectories = (GLib.getenv('SIREN_PRESETS_DIRS') ||
       GLib.getenv('SIREN_PRESETS_DIR') || '')
@@ -204,6 +206,7 @@ class SirenWindow {
       this.validationPlayer.stop();
       if (this.validationTimer) GLib.source_remove(this.validationTimer);
       if (this.effectTimer) GLib.source_remove(this.effectTimer);
+      if (this.voiceTimer) GLib.source_remove(this.voiceTimer);
       this.validationSerial++;
       this.removePreviewFile();
       this.removeOriginalPreviewFile();
@@ -247,7 +250,7 @@ class SirenWindow {
 
     const presetGroup = new Adw.PreferencesGroup({
       title: 'Conversion',
-      description: 'The recommended preset and modifier are selected automatically. Switch either at any time to compare results.',
+      description: 'The recommended preset is selected automatically. Switch it at any time to compare results.',
     });
     this.presetRow = new Adw.ComboRow({
       title: 'Preset',
@@ -256,26 +259,46 @@ class SirenWindow {
     this.presetRow.connect('notify::selected', () => {
       if (this.ignorePresetChanges || !this.sourceFile) return;
       const preset = this.presets[this.presetRow.selected];
-      this.beginConversion(preset, MODIFIERS[this.modifierRow.selected]);
+      this.beginConversion(preset);
     });
     presetGroup.add(this.presetRow);
 
-    this.modifierRow = new Adw.ComboRow({
-      title: 'Modifier',
-      subtitle: 'Changes resonance, pitch, weight, or contour',
-      model: Gtk.StringList.new(MODIFIERS.map(modifier => modifier.name)),
-      selected: 0,
-    });
-    this.modifierRow.connect('notify::selected', () => {
-      if (this.ignoreModifierChanges || !this.sourceFile) return;
-      const preset = this.presets[this.presetRow.selected];
-      this.beginConversion(preset, MODIFIERS[this.modifierRow.selected]);
-    });
-    presetGroup.add(this.modifierRow);
+    const sliderWidth = 300;
+    const addVoiceSlider = (property, title, low, high) => {
+      const row = new Adw.ActionRow({ title });
+      const control = new Gtk.Box({
+        orientation: Gtk.Orientation.VERTICAL,
+        spacing: 0,
+        width_request: sliderWidth,
+        hexpand: true,
+        valign: Gtk.Align.CENTER,
+      });
+      const scale = new Gtk.Scale({
+        orientation: Gtk.Orientation.HORIZONTAL,
+        adjustment: new Gtk.Adjustment({ value: 0, lower: -100, upper: 100, step_increment: 1, page_increment: 10 }),
+        draw_value: false, hexpand: true,
+      });
+      scale.connect('value-changed', () => this.scheduleVoiceControls());
+      const endpoints = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, hexpand: true });
+      const lowLabel = new Gtk.Label({ label: low, hexpand: true, halign: Gtk.Align.START, xalign: 0 });
+      const highLabel = new Gtk.Label({ label: high, hexpand: true, halign: Gtk.Align.END, xalign: 1 });
+      lowLabel.add_css_class('dim-label');
+      highLabel.add_css_class('dim-label');
+      endpoints.append(lowLabel);
+      endpoints.append(highLabel);
+      control.append(scale);
+      control.append(endpoints);
+      row.add_suffix(control);
+      presetGroup.add(row);
+      this[property] = scale;
+    };
+    addVoiceSlider('pitchScale', 'Pitch', 'Low', 'High');
+    addVoiceSlider('resonanceScale', 'Resonance', 'Dark', 'Bright');
+    addVoiceSlider('weightScale', 'Weight', 'Light', 'Heavy');
+    addVoiceSlider('intonationScale', 'Intonation', 'Shallow', 'Wide');
 
     const volumeRow = new Adw.ActionRow({
       title: 'Volume',
-      subtitle: 'Detected from the converted cry · 0% to hardware maximum',
     });
     this.volumeScale = new Gtk.Scale({
       orientation: Gtk.Orientation.HORIZONTAL,
@@ -289,7 +312,6 @@ class SirenWindow {
 
     const fadeRow = new Adw.ActionRow({
       title: 'Fades',
-      subtitle: 'Use stock volume steps over the first or last 25%',
     });
     const fadeButtons = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 6, valign: Gtk.Align.CENTER });
     this.fadeInButton = new Gtk.ToggleButton({ label: 'Fade In' });
@@ -554,6 +576,7 @@ class SirenWindow {
       this.stereoBalance = prepared.stereoBalance;
       this.project = null;
       this.baseProject = null;
+      this.rawProject = null;
       this.fileRow.title = file.get_basename();
       this.fileRow.subtitle = `${source.channels} channel${source.channels === 1 ? '' : 's'} · ${source.rate.toLocaleString()} Hz · ${formatDuration(source.duration)}`;
       this.originalRow.subtitle = formatDuration(source.duration);
@@ -566,12 +589,12 @@ class SirenWindow {
       this.ignorePresetChanges = true;
       this.presetRow.selected = selected;
       this.ignorePresetChanges = false;
-      const modifierIndex = Math.max(0, MODIFIERS.findIndex(modifier => modifier.id === suggestion.modifierId));
-      this.ignoreModifierChanges = true;
-      this.modifierRow.selected = modifierIndex;
-      this.ignoreModifierChanges = false;
+      this.ignoreVoiceChanges = true;
+      for (const scale of [this.pitchScale, this.resonanceScale, this.weightScale, this.intonationScale])
+        scale.set_value(0);
+      this.ignoreVoiceChanges = false;
       const preset = this.presets[selected];
-      this.beginConversion(preset, MODIFIERS[modifierIndex]);
+      this.beginConversion(preset);
     } catch (error) {
       this.showToast(error.message);
     }
@@ -581,7 +604,8 @@ class SirenWindow {
     this.spinner.visible = busy;
     this.spinner.spinning = busy;
     this.presetRow.sensitive = !busy;
-    this.modifierRow.sensitive = !busy;
+    for (const scale of [this.pitchScale, this.resonanceScale, this.weightScale, this.intonationScale])
+      scale.sensitive = !busy;
     this.volumeScale.sensitive = !busy;
     this.fadeInButton.sensitive = !busy;
     this.fadeOutButton.sensitive = !busy;
@@ -590,11 +614,15 @@ class SirenWindow {
     if (message) this.convertedRow.subtitle = message;
   }
 
-  beginConversion(preset, modifier = MODIFIERS[this.modifierRow.selected]) {
+  beginConversion(preset) {
     const serial = ++this.conversionSerial;
     if (this.effectTimer) {
       GLib.source_remove(this.effectTimer);
       this.effectTimer = 0;
+    }
+    if (this.voiceTimer) {
+      GLib.source_remove(this.voiceTimer);
+      this.voiceTimer = 0;
     }
     this.convertedPlayer.stop();
     this.setBusy(true, preset.type === 'auto' ? 'Testing conversion profiles…' :
@@ -603,37 +631,66 @@ class SirenWindow {
       if (serial !== this.conversionSerial) return GLib.SOURCE_REMOVE;
       try {
         let result, preview;
-        let detail = modifier.id === 'none' ? preset.name : `${modifier.name} · ${preset.name}`;
+        let detail = preset.name;
         if (preset.type === 'auto') {
-          const fitted = fitAutoPreset(this.preparedSamples, this.profilePresets, preset, modifier.id,
+          const fitted = fitAutoPreset(this.preparedSamples, this.profilePresets, preset,
             (current, total) => { this.convertedRow.subtitle = `Testing profile ${current} of ${total}…`; });
           result = fitted.result;
           const basis = this.presets.find(item => item.id === fitted.basis);
           detail = `${detail} · based on ${basis?.name ?? fitted.basis}`;
         } else if (preset.options?.precise) {
           const fitted = fitPrecisePreset(this.preparedSamples, this.stereoBalance);
-          result = applyModifier(fitted.result, modifier.id);
-          preview = modifier.id === 'none' ? fitted.preview : renderPreview(result);
+          result = fitted.result;
+          preview = fitted.preview;
         } else {
-          result = applyModifier(convert(this.preparedSamples,
-            { ...preset.options, stereoBalance: this.stereoBalance }), modifier.id);
+          result = convert(this.preparedSamples, { ...preset.options, stereoBalance: this.stereoBalance });
         }
         if (serial !== this.conversionSerial) return GLib.SOURCE_REMOVE;
-        this.baseProject = { ...result, label: suggestedLabel(this.sourceFile.get_basename()) };
-        this.ignoreEffectChanges = true;
-        this.volumeScale.set_value(detectConversionVolume(this.baseProject));
-        this.ignoreEffectChanges = false;
-        this.applyEffects(preview);
-        this.convertedRow.subtitle = `${detail} · ${formatDuration(result.previewDuration ?? result.sourceDuration)}`;
+        this.rawProject = { ...result, label: suggestedLabel(this.sourceFile.get_basename()) };
+        this.conversionDetail = detail;
+        this.applyVoiceSettings(preview);
         this.setBusy(false);
       } catch (error) {
         this.project = null;
         this.baseProject = null;
+        this.rawProject = null;
         this.setBusy(false, 'Conversion failed');
         this.showToast(error.message);
       }
       return GLib.SOURCE_REMOVE;
     });
+  }
+
+  voiceOptions() {
+    return {
+      pitch: this.pitchScale.get_value() / 100,
+      resonance: this.resonanceScale.get_value() / 100,
+      weight: this.weightScale.get_value() / 100,
+      intonation: this.intonationScale.get_value() / 100,
+    };
+  }
+
+  scheduleVoiceControls() {
+    if (this.ignoreVoiceChanges || !this.rawProject) return;
+    if (this.voiceTimer) GLib.source_remove(this.voiceTimer);
+    this.voiceTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
+      this.voiceTimer = 0;
+      try { this.applyVoiceSettings(); }
+      catch (error) { this.showToast(error.message); }
+      return GLib.SOURCE_REMOVE;
+    });
+  }
+
+  applyVoiceSettings(defaultPreview = null) {
+    const voiceOptions = this.voiceOptions();
+    this.baseProject = applyVoiceControls(this.rawProject, voiceOptions);
+    this.ignoreEffectChanges = true;
+    this.volumeScale.set_value(detectConversionVolume(this.baseProject));
+    this.ignoreEffectChanges = false;
+    const neutral = Object.values(voiceOptions).every(value => value === 0);
+    this.applyEffects(neutral ? defaultPreview : null);
+    this.convertedRow.subtitle = `${this.conversionDetail} · ${formatDuration(
+      this.baseProject.previewDuration ?? this.baseProject.sourceDuration)}`;
   }
 
   effectOptions() {
