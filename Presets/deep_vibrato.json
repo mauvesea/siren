@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "id": "deep_vibrating",
-  "name": "Deep Vibrating",
+  "id": "deep_vibrato",
+  "name": "Deep Vibrato",
   "description": "Keeps fast pitch movement while extending the search down to 64 Hz.",
   "type": "profile",
   "options": {

@@ -1,7 +1,3 @@
-import Gio from 'gi://Gio';
-
-const textDecoder = new TextDecoder('utf-8');
-const MAX_PRESET_BYTES = 16 * 1024;
 const LIMITS = { id: 32, name: 32, description: 255, type: 32, noiseMode: 32 };
 const PROFILE_FIELDS = new Set([
   'noisePitch', 'noiseGain', 'minHz', 'maxHz', 'stepFrames',
@@ -24,35 +20,34 @@ function boundedNumber(value, field, filename, low, high) {
 function validateProfile(preset, filename) {
   if (!preset.options || typeof preset.options !== 'object' || Array.isArray(preset.options))
     throw new Error(`${filename}: profile presets need an options object.`);
-  const options = preset.options;
   const ranges = {
     noisePitch: [0, 255], noiseGain: [0, 4], minHz: [64, 1800],
     maxHz: [64, 1800], stepFrames: [1, 2], secondGain: [0, 1],
   };
-  for (const key of Object.keys(options)) {
+  for (const key of Object.keys(preset.options)) {
     if (key.length > 16 || !PROFILE_FIELDS.has(key))
       throw new Error(`${filename}: unknown or too-long profile parameter “${key}”.`);
   }
   for (const [key, [low, high]] of Object.entries(ranges)) {
-    if (options[key] !== undefined) boundedNumber(options[key], key, filename, low, high);
+    if (preset.options[key] !== undefined) boundedNumber(preset.options[key], key, filename, low, high);
   }
-  if (options.stepFrames !== undefined && ![1, 2].includes(options.stepFrames))
+  if (preset.options.stepFrames !== undefined && ![1, 2].includes(preset.options.stepFrames))
     throw new Error(`${filename}: stepFrames must be 1 or 2.`);
-  if (options.precise !== undefined && typeof options.precise !== 'boolean')
+  if (preset.options.precise !== undefined && typeof preset.options.precise !== 'boolean')
     throw new Error(`${filename}: precise must be true or false.`);
-  if (options.noisePitch !== undefined && !Number.isInteger(options.noisePitch))
+  if (preset.options.noisePitch !== undefined && !Number.isInteger(preset.options.noisePitch))
     throw new Error(`${filename}: noisePitch must be a whole number.`);
-  if (options.noiseMode !== undefined) {
-    boundedString(options.noiseMode, 'noiseMode', filename);
-    if (!['fixed', 'texture'].includes(options.noiseMode))
+  if (preset.options.noiseMode !== undefined) {
+    boundedString(preset.options.noiseMode, 'noiseMode', filename);
+    if (!['fixed', 'texture'].includes(preset.options.noiseMode))
       throw new Error(`${filename}: noiseMode must be “fixed” or “texture”.`);
   }
-  if (options.smoothing !== undefined) {
-    boundedString(options.smoothing, 'smoothing', filename);
-    if (!['legacy', 'none'].includes(options.smoothing))
+  if (preset.options.smoothing !== undefined) {
+    boundedString(preset.options.smoothing, 'smoothing', filename);
+    if (!['legacy', 'none'].includes(preset.options.smoothing))
       throw new Error(`${filename}: smoothing must be “legacy” or “none”.`);
   }
-  if ((options.minHz ?? 120) > (options.maxHz ?? 1100))
+  if ((preset.options.minHz ?? 120) > (preset.options.maxHz ?? 1100))
     throw new Error(`${filename}: minHz cannot exceed maxHz.`);
 }
 
@@ -60,9 +55,10 @@ function validateAuto(preset, filename) {
   if (!preset.search || !Array.isArray(preset.search.noiseGainFactors) ||
       !Array.isArray(preset.search.noisePitches))
     throw new Error(`${filename}: the Auto preset needs both search arrays.`);
-  for (const key of Object.keys(preset.search))
+  for (const key of Object.keys(preset.search)) {
     if (key.length > 16 || !['noiseGainFactors', 'noisePitches'].includes(key))
       throw new Error(`${filename}: unknown Auto parameter “${key}”.`);
+  }
   for (const [key, values, high] of [
     ['noiseGainFactors', preset.search.noiseGainFactors, 8],
     ['noisePitches', preset.search.noisePitches, 255],
@@ -77,11 +73,12 @@ function validateAuto(preset, filename) {
   }
 }
 
-function validatePreset(preset, filename) {
+export function validatePreset(preset, filename) {
   if (!preset || typeof preset !== 'object') throw new Error(`${filename}: expected a JSON object.`);
-  for (const key of Object.keys(preset))
+  for (const key of Object.keys(preset)) {
     if (key.length > 16 || !['schemaVersion', 'id', 'name', 'description', 'type', 'order', 'options', 'search'].includes(key))
       throw new Error(`${filename}: unknown preset parameter “${key}”.`);
+  }
   boundedString(preset.id, 'id', filename);
   boundedString(preset.name, 'name', filename);
   boundedString(preset.description, 'description', filename);
@@ -107,50 +104,20 @@ function comparePresets(a, b) {
   return byName || a.id.localeCompare(b.id);
 }
 
-export function loadPresets(directoryPath) {
-  const directory = Gio.File.new_for_path(directoryPath);
-  const presets = [];
-  let enumerator;
-  try {
-    enumerator = directory.enumerate_children(
-      'standard::name,standard::type', Gio.FileQueryInfoFlags.NONE, null);
-  } catch (error) {
-    throw new Error(`Could not open the Presets folder at ${directoryPath}: ${error.message}`);
-  }
-  let info;
-  while ((info = enumerator.next_file(null)) !== null) {
-    const name = info.get_name();
-    if (!name.toLowerCase().endsWith('.json')) continue;
-    if (info.get_file_type() !== Gio.FileType.REGULAR) continue;
-    const file = directory.get_child(name);
-    try {
-      const fileInfo = file.query_info('standard::size', Gio.FileQueryInfoFlags.NONE, null);
-      if (fileInfo.get_size() > MAX_PRESET_BYTES)
-        throw new Error(`preset files must be at most ${MAX_PRESET_BYTES} bytes.`);
-      const [, contents] = file.load_contents(null);
-      presets.push(validatePreset(JSON.parse(textDecoder.decode(contents)), name));
-    } catch (error) {
-      throw new Error(`Could not load ${name}: ${error.message}`);
+export function parsePresetDirectories(directories) {
+  const byId = new Map();
+  for (const files of directories) {
+    const directoryIds = new Set();
+    for (const file of files) {
+      let preset;
+      try { preset = validatePreset(JSON.parse(file.json), file.filename); }
+      catch (error) { throw new Error(`Could not load ${file.filename}: ${error.message}`); }
+      if (directoryIds.has(preset.id)) throw new Error(`Preset id “${preset.id}” is duplicated.`);
+      directoryIds.add(preset.id);
+      byId.set(preset.id, preset);
     }
   }
-  enumerator.close(null);
-  presets.sort(comparePresets);
-  const ids = new Set();
-  for (const preset of presets) {
-    if (ids.has(preset.id)) throw new Error(`Preset id “${preset.id}” is duplicated.`);
-    ids.add(preset.id);
-  }
-  return presets;
-}
-
-export function loadPresetDirectories(directoryPaths) {
-  const byId = new Map();
-  for (const directoryPath of directoryPaths) {
-    if (!Gio.File.new_for_path(directoryPath).query_exists(null)) continue;
-    for (const preset of loadPresets(directoryPath)) byId.set(preset.id, preset);
-  }
-  const presets = [...byId.values()];
-  presets.sort(comparePresets);
+  const presets = [...byId.values()].sort(comparePresets);
   if (!presets.some(preset => preset.type === 'profile'))
     throw new Error('No profile presets were found in the Presets folders.');
   return presets;

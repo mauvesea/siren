@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "deep_airy",
+  "name": "Deep Airy",
+  "description": "Combines a low tonal range with a light, source-dependent breathy layer.",
+  "type": "profile",
+  "options": {
+    "minHz": 64,
+    "maxHz": 1600,
+    "noisePitch": 44,
+    "noiseGain": 1.1,
+    "secondGain": 0.75,
+    "noiseMode": "texture"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "bass_clean",
+  "name": "Bass (Clean)",
+  "description": "A focused low register with restrained texture and a strong supporting tone.",
+  "type": "profile",
+  "options": {
+    "minHz": 64,
+    "maxHz": 850,
+    "stepFrames": 2,
+    "noisePitch": 92,
+    "noiseGain": 0.4,
+    "secondGain": 0.85,
+    "noiseMode": "texture"
+  }
+}

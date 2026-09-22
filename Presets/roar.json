@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "roar",
+  "name": "Roar",
+  "description": "A broad, sustained profile with strong source-shaped grain and a wider pitch range than Deep Roar.",
+  "type": "profile",
+  "options": {
+    "minHz": 80,
+    "maxHz": 1600,
+    "stepFrames": 2,
+    "noisePitch": 75,
+    "noiseGain": 3,
+    "secondGain": 0.72,
+    "noiseMode": "texture"
+  }
+}

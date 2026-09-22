@@ -1,15 +1,16 @@
 import { analyzeWaveform, convert, prepareWav, readWav, waveformWindow } from './converter.js';
 import { renderPreview } from './preview.js';
+import { scorePrecisePreview } from './quality.js';
 
 export function suggestPreset(samples) {
   const features = analyzeWaveform(samples);
   let id = 'clean';
   if (features.peakHz < 240 && features.pitchJitter > 0.18) id = 'bass_vibrato';
-  else if (features.peakHz < 240 && features.flatness > 0.12) id = 'raspy_bass';
+  else if (features.peakHz < 240 && features.flatness > 0.12) id = 'bass_raspy';
   else if (features.peakHz < 240 || features.lowShare > 0.08) id = 'deep_roar';
   else if (features.peakHz < 360 || features.lowShare > 0.035) id = 'deep';
   else if (features.flatness > 0.74) id = 'textured';
-  else if (features.pitchJitter > 0.18) id = 'vibrating';
+  else if (features.pitchJitter > 0.18) id = 'vibrato';
   else if (features.peakHz > 1100) id = 'bright';
   return { id, features };
 }
@@ -52,18 +53,48 @@ function renderDifference(samples, reference, options) {
   return { result, score: difference(reference, signature(prepared.samples)) };
 }
 
+const PRECISE_CANDIDATES = [
+  { strategy: 'focused', tuning: { waveMode: 'shared' } },
+  { strategy: 'layered', tuning: {
+    waveMode: 'independent', waveExclusionBins: 12, waveHighBias: 0,
+    waveMinHz: 70, primaryMinHz: 120, secondStability: 0.12,
+    waveFitThreshold: 0.65, noiseStrength: 1.5, noisePitch: 100,
+  } },
+];
+
+export function fitPrecisePreset(samples, stereoBalance = null, onProgress = () => {}) {
+  let best = null;
+  for (const [index, candidate] of PRECISE_CANDIDATES.entries()) {
+    const result = convert(samples, {
+      precise: true, stereoBalance, preciseTuning: candidate.tuning,
+    });
+    const preview = renderPreview(result);
+    const quality = scorePrecisePreview(samples, preview);
+    if (!best || quality.score < best.score)
+      best = { result, preview, score: quality.score, strategy: candidate.strategy };
+    onProgress(index + 1, PRECISE_CANDIDATES.length);
+  }
+  return best;
+}
+
 export function fitAutoPreset(samples, profiles, autoPreset, onProgress = () => {}) {
   const reference = signature(samples);
   let best = null;
   let tried = 0;
   const total = profiles.length + autoPreset.search.noiseGainFactors.length + autoPreset.search.noisePitches.length;
   const tryOptions = (options, basis) => {
-    const candidate = renderDifference(samples, reference, options);
+    let candidate;
+    if (options.precise) {
+      const fitted = fitPrecisePreset(samples);
+      candidate = { result: fitted.result,
+        score: difference(reference, signature(prepareWav(readWav(fitted.preview)).samples)) };
+    } else candidate = renderDifference(samples, reference, options);
     tried++;
     onProgress(tried, total);
     if (!best || candidate.score < best.score) best = { ...candidate, options, basis };
   };
   for (const preset of profiles) tryOptions(preset.options, preset.id);
+  if (best.options.precise) { onProgress(total, total); return best; }
   const seed = { ...best.options };
   for (const factor of autoPreset.search.noiseGainFactors)
     tryOptions({ ...seed, noiseGain: Math.min(4, seed.noiseGain * factor) }, best.basis);

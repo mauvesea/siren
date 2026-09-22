@@ -1,6 +1,7 @@
 # Siren presets
 
-Each JSON file appears as one choice in Siren's preset menu, sorted by `id`.
+Each JSON file appears as one choice in Siren's preset menu, sorted by name,
+with Auto first and Precise last.
 A normal preset
 uses `"type": "profile"` and passes its `options` directly to the converter.
 Copy an existing file, give it a unique lowercase `id`, change its `name`, and
@@ -15,6 +16,13 @@ Supported profile options:
 - `secondGain`: secondary square-wave loudness multiplier, from 0 to 1.
 - `noiseMode`: `"fixed"` or source-dependent `"texture"`.
 - `smoothing`: `"legacy"` or `"none"`.
+- `precise`: `true` enables per-frame matching with the built-in wave channel
+  and combines identical consecutive commands. The app's preset engine
+  compares two hardware-valid fits for this special profile. Other profile
+  options are ignored when `precise` is true.
+
+See [`docs/precise-engine.md`](../docs/precise-engine.md) for the hardware
+limits and the Precise conversion method.
 
 `auto.json` searches the available profiles and adjusts noise settings for the
 selected WAV. It is a special preset and should remain the only file with

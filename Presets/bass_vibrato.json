@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "bass_vibrato",
-  "name": "Bass Vibrato",
+  "name": "Bass (Vibrato)",
   "description": "Follows fast low-pitch movement every frame while keeping enough texture for growls and rumbles.",
   "type": "profile",
   "options": {
