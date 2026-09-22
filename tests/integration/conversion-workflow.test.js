@@ -33,8 +33,8 @@ const presets = loadPresets(GLib.build_filenamev([root, 'Presets']));
 const profiles = presets.filter(preset => preset.type === 'profile');
 const autoPreset = presets.find(preset => preset.type === 'auto');
 
-assert(presets.length === 14, 'Expected all 14 base presets.');
-assert(profiles.length === 13, 'Expected 13 fixed conversion profiles.');
+assert(presets.length === 15, 'Expected all 15 base presets.');
+assert(profiles.length === 14, 'Expected 14 fixed conversion profiles.');
 assert(presets[0].id === 'auto', 'Auto must be the first preset.');
 assert(presets.at(-1).id === 'precise', 'Precise must be the last preset.');
 assert(presets.slice(1, -1).every((preset, index, middle) =>
@@ -43,7 +43,7 @@ assert(presets.slice(1, -1).every((preset, index, middle) =>
 assert(presets.find(preset => preset.id === 'clean')?.name === 'Clean',
   'The former Default preset must be called Clean.');
 assert([
-  'airy', 'bright', 'clean', 'hollow', 'long_notes', 'noisy', 'precise',
+  'airy', 'bright', 'bulky', 'clean', 'hollow', 'long_notes', 'noisy', 'precise',
   'punchy', 'raspy', 'roar', 'textured', 'tremolo', 'vibrato',
 ].every(id => profiles.some(preset => preset.id === id)), 'Expected the revised profile presets.');
 assert(presets.every(preset => !preset.id.startsWith('deep_') && !preset.id.startsWith('bass_')),

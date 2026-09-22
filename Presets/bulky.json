@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "id": "bulky",
+  "name": "Bulky",
+  "description": "Uses all four audio channels for weighty low cries, with a wave-channel body and source-matched LFSR impact.",
+  "type": "profile",
+  "options": {
+    "tracking": "bulky"
+  }
+}

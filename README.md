@@ -8,7 +8,8 @@ Siren converts WAV recordings into Game Boy cries and lets you audition
 the pitch and length of existing cry ASM files for
 [pokecrystal](https://github.com/pret/pokecrystal). The cries use Game Boy
 square-wave channels 5 and 6 and noise channel 8. The **Precise** preset can
-also use the built-in wave channel 7. Generated cries are intended
+also use the built-in wave channel 7, while **Bulky** deliberately layers all
+four channels for low, forceful sounds. Generated cries are intended
 for **pitch 0** and **length 256**.
 
 This tool is AI assisted.
@@ -112,6 +113,11 @@ follows source dynamics, retains overall stereo balance from two-channel WAVs,
 and merges repeated commands. A stock cry
 cannot preserve arbitrary PCM samples, sample rate, or bit depth. See the
 [engine analysis and fidelity limits](docs/precise-engine.md).
+
+**Bulky** uses stable duty-cycle patterns on both pulse channels, the wave
+channel for low body, and longer source-matched noise phrases with hardware
+volume envelopes. It is a full conversion profile and can be combined with
+any modifier, including the separate **Heavy** modifier.
 
 See [`Presets/README.md`](Presets/README.md) for fields and limits. In a source
 checkout, add files to `Presets/`. For an AppImage, add a `Presets` folder beside

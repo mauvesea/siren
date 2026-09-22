@@ -27,11 +27,12 @@ test('Windows uses the shared converter and preview behavior', async () => {
   const presets = await bundledPresets();
   const profiles = presets.filter(preset => preset.type === 'profile');
   const auto = presets.find(preset => preset.type === 'auto');
-  assert.equal(presets.length, 14);
-  assert.equal(profiles.length, 13);
+  assert.equal(presets.length, 15);
+  assert.equal(profiles.length, 14);
   assert.ok(auto);
   assert.equal(presets.find(preset => preset.id === 'tremolo')?.options.tracking, 'tremolo');
   assert.equal(presets.find(preset => preset.id === 'long_notes')?.options.tracking, 'sustain');
+  assert.equal(presets.find(preset => preset.id === 'bulky')?.options.tracking, 'bulky');
   assert.ok(presets.every(preset => !preset.id.startsWith('bass_') && !preset.id.startsWith('deep_')));
   assert.ok(presets.every(preset => !/^(Bass \(|Deep )/.test(preset.name)));
   assert.deepEqual(MODIFIERS.map(modifier => modifier.name),
