@@ -7,6 +7,7 @@ import test from 'node:test';
 import { applyConversionEffects, convert, detectConversionVolume, encodeWav, makeAsm, prepareWav, readWav, suggestedLabel } from '../../src/converter.js';
 import { applyCryParameters, parseCryAsm } from '../../src/cry-asm.js';
 import { fitAutoPreset, suggestPreset } from '../../src/preset-engine.js';
+import { applyModifier, MODIFIERS } from '../../src/modifier-engine.js';
 import { renderPreview } from '../../src/preview.js';
 import { parsePresetDirectories } from '../../windows/preset-schema.js';
 
@@ -26,9 +27,15 @@ test('Windows uses the shared converter and preview behavior', async () => {
   const presets = await bundledPresets();
   const profiles = presets.filter(preset => preset.type === 'profile');
   const auto = presets.find(preset => preset.type === 'auto');
-  assert.equal(presets.length, 22);
-  assert.equal(profiles.length, 21);
+  assert.equal(presets.length, 14);
+  assert.equal(profiles.length, 13);
   assert.ok(auto);
+  assert.equal(presets.find(preset => preset.id === 'tremolo')?.options.tracking, 'tremolo');
+  assert.equal(presets.find(preset => preset.id === 'long_notes')?.options.tracking, 'sustain');
+  assert.ok(presets.every(preset => !preset.id.startsWith('bass_') && !preset.id.startsWith('deep_')));
+  assert.ok(presets.every(preset => !/^(Bass \(|Deep )/.test(preset.name)));
+  assert.deepEqual(MODIFIERS.map(modifier => modifier.name),
+    ['None', 'Dark', 'Bright', 'Low', 'High', 'Heavy', 'Light', 'Wide', 'Shallow']);
   assert.equal(presets[0].id, 'auto');
   assert.equal(presets.at(-1).id, 'precise');
   assert.ok(presets.slice(1, -1).every((preset, index, middle) =>
@@ -52,6 +59,11 @@ test('Windows uses the shared converter and preview behavior', async () => {
   assert.ok(makeAsm(project, 'two_tones.wav').includes(`Cry_${project.label}_Ch8:`));
   assert.equal(readWav(renderPreview(project)).rate, 44100);
   assert.ok(profiles.some(preset => preset.id === suggestPreset(source.samples).id));
+  assert.ok(MODIFIERS.some(modifier => modifier.id === suggestPreset(source.samples).modifierId));
+
+  const low = applyModifier(project, 'low');
+  assert.equal(low.modifier, 'low');
+  assert.notEqual(low.channels.ch5[0].frequency, project.channels.ch5[0].frequency);
 
   const fitted = fitAutoPreset(samples.subarray(0, 5 * 176), profiles, auto);
   assert.ok(Number.isFinite(fitted.score));

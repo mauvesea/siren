@@ -4,6 +4,7 @@ import GLib from 'gi://GLib';
 import { applyConversionEffects, convert, encodeWav, makeAsm, makePlaybackWav, prepareWav, readWav } from '../../src/converter.js';
 import { parseCryAsm } from '../../src/cry-asm.js';
 import { fitAutoPreset, fitPrecisePreset, suggestPreset } from '../../src/preset-engine.js';
+import { applyModifier, MODIFIERS } from '../../src/modifier-engine.js';
 import { loadPresets } from '../../src/preset-loader.js';
 import { renderPreview } from '../../src/preview.js';
 
@@ -32,8 +33,8 @@ const presets = loadPresets(GLib.build_filenamev([root, 'Presets']));
 const profiles = presets.filter(preset => preset.type === 'profile');
 const autoPreset = presets.find(preset => preset.type === 'auto');
 
-assert(presets.length === 22, 'Expected all 22 presets.');
-assert(profiles.length === 21, 'Expected 21 fixed conversion profiles.');
+assert(presets.length === 14, 'Expected all 14 base presets.');
+assert(profiles.length === 13, 'Expected 13 fixed conversion profiles.');
 assert(presets[0].id === 'auto', 'Auto must be the first preset.');
 assert(presets.at(-1).id === 'precise', 'Precise must be the last preset.');
 assert(presets.slice(1, -1).every((preset, index, middle) =>
@@ -42,11 +43,16 @@ assert(presets.slice(1, -1).every((preset, index, middle) =>
 assert(presets.find(preset => preset.id === 'clean')?.name === 'Clean',
   'The former Default preset must be called Clean.');
 assert([
-  'bass_clean', 'bass_hollow', 'bass_punchy', 'bass_raspy', 'bass_textured',
-  'bass_vibrato', 'deep_airy', 'deep_vibrato', 'roar', 'vibrato',
+  'airy', 'bright', 'clean', 'hollow', 'long_notes', 'noisy', 'precise',
+  'punchy', 'raspy', 'roar', 'textured', 'tremolo', 'vibrato',
 ].every(id => profiles.some(preset => preset.id === id)), 'Expected the revised profile presets.');
-assert(['deep_default', 'percussive', 'pure_tone'].every(id =>
-  !presets.some(preset => preset.id === id)), 'Removed presets must stay removed.');
+assert(presets.every(preset => !preset.id.startsWith('deep_') && !preset.id.startsWith('bass_')),
+  'Prefixed presets must be represented by modifiers instead.');
+assert(presets.every(preset => !/^(Bass \(|Deep )/.test(preset.name)),
+  'Bundled preset names must not contain baked-in modifiers.');
+assert(JSON.stringify(MODIFIERS.map(modifier => modifier.id)) ===
+  JSON.stringify(['none', 'dark', 'bright', 'low', 'high', 'heavy', 'light', 'wide', 'shallow']),
+  'Modifier choices changed.');
 assert(Boolean(autoPreset), 'Expected the Auto preset.');
 assert(JSON.stringify(autoPreset.search.noiseGainFactors) === JSON.stringify([0, 0.5, 1.5, 2.5]),
   'Auto noise gain search changed.');
@@ -97,16 +103,60 @@ assert(profiles.some(preset => preset.id === suggestion.id),
   'Automatic recommendation should choose an available profile.');
 assert(Number.isFinite(suggestion.features.peakHz) && suggestion.features.peakHz > 0,
   'Automatic recommendation should analyze the WAV samples.');
+assert(MODIFIERS.some(modifier => modifier.id === suggestion.modifierId),
+  'Automatic recommendation should choose an available modifier.');
 const tone = hz => Float64Array.from({ length: 17 * 176 },
   (_, i) => 0.5 * Math.sin(2 * Math.PI * hz * i / rate));
 assert(suggestPreset(tone(120)).id !== suggestPreset(tone(1400)).id,
   'Automatic recommendation should respond to the WAV spectrum.');
 
 const shortSamples = samples.subarray(0, 5 * 176);
-const fitted = fitAutoPreset(shortSamples, profiles, autoPreset);
+const fitted = fitAutoPreset(shortSamples, profiles, autoPreset, 'low');
 assert(Number.isFinite(fitted.score), 'Auto did not produce a finite match score.');
 assert(profiles.some(preset => preset.id === fitted.basis), 'Auto chose an unknown profile.');
 assert(readWav(renderPreview(fitted.result)).rate === 44100, 'Auto preview is not playable.');
+assert(fitted.result.modifier === 'low', 'Auto should apply the selected modifier.');
+
+const regular = convert(tone(440), cleanPreset.options);
+const low = applyModifier(regular, 'low');
+const high = applyModifier(regular, 'high');
+const firstHz = result => 131072 / (2048 - result.channels.ch5.find(note => note.volume).frequency);
+assert(Math.abs(firstHz(low) / firstHz(regular) - 0.5) < 0.03,
+  'Low should transpose tonal voices down one octave.');
+assert(Math.abs(firstHz(high) / firstHz(regular) - 2) < 0.06,
+  'High should transpose tonal voices up one octave.');
+const dark = applyModifier(regular, 'dark');
+const bright = applyModifier(regular, 'bright');
+assert(dark.channels.ch5.every(note => note.duty === undefined || note.duty >= 1),
+  'Dark should avoid the thinnest pulse resonance.');
+assert(bright.channels.ch5.every(note => note.duty === undefined || note.duty <= 1),
+  'Bright should favor narrow pulse resonance.');
+const heavy = applyModifier(regular, 'heavy');
+const light = applyModifier(regular, 'light');
+assert(heavy.channels.ch6.reduce((sum, note) => sum + note.volume, 0) >=
+  regular.channels.ch6.reduce((sum, note) => sum + note.volume, 0),
+  'Heavy should strengthen the supporting pulse layer.');
+assert(light.channels.ch6.reduce((sum, note) => sum + note.volume, 0) <=
+  regular.channels.ch6.reduce((sum, note) => sum + note.volume, 0),
+  'Light should reduce the supporting pulse layer.');
+const contour = {
+  channels: {
+    ch5: [
+      { duration: 3, volume: 10, envelope: 8, frequency: 1452, duty: 2 },
+      { duration: 3, volume: 10, envelope: 8, frequency: 1750, duty: 2 },
+    ], ch6: [], ch7: [], ch8: [],
+  },
+};
+const contourRatio = result => {
+  const notes = result.channels.ch5;
+  return (131072 / (2048 - notes[1].frequency)) / (131072 / (2048 - notes[0].frequency));
+};
+assert(contourRatio(applyModifier(contour, 'wide')) > contourRatio(contour),
+  'Wide should expand the pitch contour.');
+assert(contourRatio(applyModifier(contour, 'shallow')) < contourRatio(contour),
+  'Shallow should compress the pitch contour.');
+for (const modifier of MODIFIERS)
+  parseCryAsm(makeAsm({ ...applyModifier(regular, modifier.id), label: 'Modified' }));
 
 const precise = fitPrecisePreset(shortSamples);
 assert(Number.isFinite(precise.score) && readWav(precise.preview).rate === 44100,
@@ -140,6 +190,10 @@ try {
     'Other string parameters over 16 characters must be rejected.');
   rejects({ ...basePreset, options: { noiseGain: 1e309 } },
     'Nonfinite numeric parameters must be rejected.');
+  rejects({ ...basePreset, options: { pitchShift: -25 } },
+    'Tracking pitch shifts below two octaves must be rejected.');
+  rejects({ ...basePreset, options: { pitchShift: -12 } },
+    'Pitch shifts without a tracking engine must be rejected.');
 } finally {
   testFile.delete(null);
   testDirectory.delete(null);

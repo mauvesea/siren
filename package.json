@@ -29,6 +29,7 @@
       "src/converter.js",
       "src/cry-asm.js",
       "src/preset-engine.js",
+      "src/modifier-engine.js",
       "src/preview.js",
       "src/quality.js",
       "src/wave-samples.js",

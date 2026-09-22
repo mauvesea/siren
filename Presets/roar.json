@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "roar",
   "name": "Roar",
-  "description": "A broad, sustained profile with strong source-shaped grain and a wider pitch range than Deep Roar.",
+  "description": "A broad, sustained profile with strong source-shaped grain and a wide natural pitch range.",
   "type": "profile",
   "options": {
     "minHz": 80,

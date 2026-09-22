@@ -10,6 +10,7 @@ import Gtk from 'gi://Gtk?version=4.0';
 
 import { applyConversionEffects, detectConversionVolume, MAX_BYTES, MAX_SECONDS, makeAsm, makePlaybackWav, prepareWav, readWav, suggestedLabel, convert } from './converter.js';
 import { fitAutoPreset, fitPrecisePreset, suggestPreset } from './preset-engine.js';
+import { applyModifier, MODIFIERS } from './modifier-engine.js';
 import { loadPresetDirectories } from './preset-loader.js';
 import { renderPreview } from './preview.js';
 import { applyCryParameters, parseCryAsm, PITCH_MIN, PITCH_MAX, LENGTH_MIN, LENGTH_MAX } from './cry-asm.js';
@@ -103,6 +104,7 @@ class SirenWindow {
     this.effectTimer = 0;
     this.ignoreEffectChanges = false;
     this.ignorePresetChanges = false;
+    this.ignoreModifierChanges = false;
 
     let presetDirectories = (GLib.getenv('SIREN_PRESETS_DIRS') ||
       GLib.getenv('SIREN_PRESETS_DIR') || '')
@@ -245,7 +247,7 @@ class SirenWindow {
 
     const presetGroup = new Adw.PreferencesGroup({
       title: 'Conversion',
-      description: 'The recommended preset is selected automatically. Switch it at any time to compare results.',
+      description: 'The recommended preset and modifier are selected automatically. Switch either at any time to compare results.',
     });
     this.presetRow = new Adw.ComboRow({
       title: 'Preset',
@@ -254,9 +256,22 @@ class SirenWindow {
     this.presetRow.connect('notify::selected', () => {
       if (this.ignorePresetChanges || !this.sourceFile) return;
       const preset = this.presets[this.presetRow.selected];
-      this.beginConversion(preset);
+      this.beginConversion(preset, MODIFIERS[this.modifierRow.selected]);
     });
     presetGroup.add(this.presetRow);
+
+    this.modifierRow = new Adw.ComboRow({
+      title: 'Modifier',
+      subtitle: 'Changes resonance, pitch, weight, or contour',
+      model: Gtk.StringList.new(MODIFIERS.map(modifier => modifier.name)),
+      selected: 0,
+    });
+    this.modifierRow.connect('notify::selected', () => {
+      if (this.ignoreModifierChanges || !this.sourceFile) return;
+      const preset = this.presets[this.presetRow.selected];
+      this.beginConversion(preset, MODIFIERS[this.modifierRow.selected]);
+    });
+    presetGroup.add(this.modifierRow);
 
     const volumeRow = new Adw.ActionRow({
       title: 'Volume',
@@ -551,8 +566,12 @@ class SirenWindow {
       this.ignorePresetChanges = true;
       this.presetRow.selected = selected;
       this.ignorePresetChanges = false;
+      const modifierIndex = Math.max(0, MODIFIERS.findIndex(modifier => modifier.id === suggestion.modifierId));
+      this.ignoreModifierChanges = true;
+      this.modifierRow.selected = modifierIndex;
+      this.ignoreModifierChanges = false;
       const preset = this.presets[selected];
-      this.beginConversion(preset);
+      this.beginConversion(preset, MODIFIERS[modifierIndex]);
     } catch (error) {
       this.showToast(error.message);
     }
@@ -562,6 +581,7 @@ class SirenWindow {
     this.spinner.visible = busy;
     this.spinner.spinning = busy;
     this.presetRow.sensitive = !busy;
+    this.modifierRow.sensitive = !busy;
     this.volumeScale.sensitive = !busy;
     this.fadeInButton.sensitive = !busy;
     this.fadeOutButton.sensitive = !busy;
@@ -570,7 +590,7 @@ class SirenWindow {
     if (message) this.convertedRow.subtitle = message;
   }
 
-  beginConversion(preset) {
+  beginConversion(preset, modifier = MODIFIERS[this.modifierRow.selected]) {
     const serial = ++this.conversionSerial;
     if (this.effectTimer) {
       GLib.source_remove(this.effectTimer);
@@ -583,19 +603,20 @@ class SirenWindow {
       if (serial !== this.conversionSerial) return GLib.SOURCE_REMOVE;
       try {
         let result, preview;
-        let detail = preset.name;
+        let detail = modifier.id === 'none' ? preset.name : `${modifier.name} · ${preset.name}`;
         if (preset.type === 'auto') {
-          const fitted = fitAutoPreset(this.preparedSamples, this.profilePresets, preset,
+          const fitted = fitAutoPreset(this.preparedSamples, this.profilePresets, preset, modifier.id,
             (current, total) => { this.convertedRow.subtitle = `Testing profile ${current} of ${total}…`; });
           result = fitted.result;
           const basis = this.presets.find(item => item.id === fitted.basis);
-          detail = `${preset.name} · based on ${basis?.name ?? fitted.basis}`;
+          detail = `${detail} · based on ${basis?.name ?? fitted.basis}`;
         } else if (preset.options?.precise) {
           const fitted = fitPrecisePreset(this.preparedSamples, this.stereoBalance);
-          result = fitted.result;
-          preview = fitted.preview;
+          result = applyModifier(fitted.result, modifier.id);
+          preview = modifier.id === 'none' ? fitted.preview : renderPreview(result);
         } else {
-          result = convert(this.preparedSamples, { ...preset.options, stereoBalance: this.stereoBalance });
+          result = applyModifier(convert(this.preparedSamples,
+            { ...preset.options, stereoBalance: this.stereoBalance }), modifier.id);
         }
         if (serial !== this.conversionSerial) return GLib.SOURCE_REMOVE;
         this.baseProject = { ...result, label: suggestedLabel(this.sourceFile.get_basename()) };

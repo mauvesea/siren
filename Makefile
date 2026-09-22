@@ -14,7 +14,7 @@ test:
 	desktop-file-validate data/io.github.mauvesea.Siren.desktop
 
 windows:
-	npm run windows:pack
+	./build-windows.sh
 
 windows-installer:
 	npm run windows:installer
@@ -36,4 +36,5 @@ rpm:
 
 clean:
 	$(RM) -r SirenAppDir
+	$(RM) -r dist
 	$(RM) Siren-*.AppImage Siren-*.deb Siren-*.rpm

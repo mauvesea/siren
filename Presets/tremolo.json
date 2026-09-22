@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "id": "tremolo",
+  "name": "Tremolo",
+  "description": "Keeps fast melodic warbles on one channel while a separate pulse channel carries the rhythmic effect.",
+  "type": "profile",
+  "options": {
+    "tracking": "tremolo"
+  }
+}

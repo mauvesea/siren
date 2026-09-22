@@ -1,18 +1,17 @@
 import { analyzeWaveform, convert, prepareWav, readWav, waveformWindow } from './converter.js';
+import { applyModifier, suggestModifier } from './modifier-engine.js';
 import { renderPreview } from './preview.js';
 import { scorePrecisePreview } from './quality.js';
 
 export function suggestPreset(samples) {
   const features = analyzeWaveform(samples);
   let id = 'clean';
-  if (features.peakHz < 240 && features.pitchJitter > 0.18) id = 'bass_vibrato';
-  else if (features.peakHz < 240 && features.flatness > 0.12) id = 'bass_raspy';
-  else if (features.peakHz < 240 || features.lowShare > 0.08) id = 'deep_roar';
-  else if (features.peakHz < 360 || features.lowShare > 0.035) id = 'deep';
+  if (features.pitchJitter > 0.18) id = 'vibrato';
+  else if (features.peakHz < 300 && features.flatness > 0.12) id = 'raspy';
+  else if (features.peakHz < 300 || features.lowShare > 0.08) id = 'roar';
   else if (features.flatness > 0.74) id = 'textured';
-  else if (features.pitchJitter > 0.18) id = 'vibrato';
   else if (features.peakHz > 1100) id = 'bright';
-  return { id, features };
+  return { id, modifierId: suggestModifier(samples, features).id, features };
 }
 
 function signature(samples) {
@@ -46,8 +45,8 @@ function difference(source, rendered) {
   return total / Math.max(count, 1);
 }
 
-function renderDifference(samples, reference, options) {
-  const result = convert(samples, options);
+function renderDifference(samples, reference, options, modifierId) {
+  const result = applyModifier(convert(samples, options), modifierId);
   const synthesized = readWav(renderPreview(result));
   const prepared = prepareWav(synthesized);
   return { result, score: difference(reference, signature(prepared.samples)) };
@@ -77,7 +76,11 @@ export function fitPrecisePreset(samples, stereoBalance = null, onProgress = () 
   return best;
 }
 
-export function fitAutoPreset(samples, profiles, autoPreset, onProgress = () => {}) {
+export function fitAutoPreset(samples, profiles, autoPreset, modifierId = 'none', onProgress = () => {}) {
+  if (typeof modifierId === 'function') {
+    onProgress = modifierId;
+    modifierId = 'none';
+  }
   const reference = signature(samples);
   let best = null;
   let tried = 0;
@@ -86,9 +89,11 @@ export function fitAutoPreset(samples, profiles, autoPreset, onProgress = () => 
     let candidate;
     if (options.precise) {
       const fitted = fitPrecisePreset(samples);
-      candidate = { result: fitted.result,
-        score: difference(reference, signature(prepareWav(readWav(fitted.preview)).samples)) };
-    } else candidate = renderDifference(samples, reference, options);
+      const result = applyModifier(fitted.result, modifierId);
+      const preview = renderPreview(result);
+      candidate = { result,
+        score: difference(reference, signature(prepareWav(readWav(preview)).samples)) };
+    } else candidate = renderDifference(samples, reference, options, modifierId);
     tried++;
     onProgress(tried, total);
     if (!best || candidate.score < best.score) best = { ...candidate, options, basis };
@@ -96,8 +101,9 @@ export function fitAutoPreset(samples, profiles, autoPreset, onProgress = () => 
   for (const preset of profiles) tryOptions(preset.options, preset.id);
   if (best.options.precise) { onProgress(total, total); return best; }
   const seed = { ...best.options };
+  const seedNoiseGain = Number.isFinite(seed.noiseGain) ? seed.noiseGain : 0;
   for (const factor of autoPreset.search.noiseGainFactors)
-    tryOptions({ ...seed, noiseGain: Math.min(4, seed.noiseGain * factor) }, best.basis);
+    tryOptions({ ...seed, noiseGain: Math.min(4, seedNoiseGain * factor) }, best.basis);
   for (const noisePitch of autoPreset.search.noisePitches)
     tryOptions({ ...seed, noisePitch }, best.basis);
   return best;

@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "id": "long_notes",
+  "name": "Long Notes",
+  "description": "Keeps Precise's layered timbre while smoothing only the main melody and leaving crackle on supporting channels.",
+  "type": "profile",
+  "options": {
+    "tracking": "sustain"
+  }
+}

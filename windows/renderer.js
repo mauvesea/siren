@@ -3,6 +3,7 @@ import {
 } from '../src/converter.js';
 import { applyCryParameters, parseCryAsm, PITCH_MIN, PITCH_MAX, LENGTH_MIN, LENGTH_MAX } from '../src/cry-asm.js';
 import { fitAutoPreset, fitPrecisePreset, suggestPreset } from '../src/preset-engine.js';
+import { applyModifier, MODIFIERS } from '../src/modifier-engine.js';
 import { renderPreview } from '../src/preview.js';
 import { parsePresetDirectories } from './preset-schema.js';
 
@@ -24,6 +25,7 @@ const state = {
   validationTimer: 0,
   resumeValidation: false,
   ignorePresetChange: false,
+  ignoreModifierChange: false,
   ignoreCryChange: false,
   effectTimer: 0,
 };
@@ -136,6 +138,7 @@ function setPage(name) {
 function setConversionBusy(busy, message = '') {
   $('#conversion-progress').hidden = !busy;
   $('#preset-select').disabled = busy;
+  $('#modifier-select').disabled = busy;
   $('#volume-input').disabled = busy;
   $('#fade-in-button').disabled = busy;
   $('#fade-out-button').disabled = busy;
@@ -196,12 +199,16 @@ function loadWav(file) {
     state.ignorePresetChange = true;
     $('#preset-select').selectedIndex = selected;
     state.ignorePresetChange = false;
+    const modifierIndex = Math.max(0, MODIFIERS.findIndex(modifier => modifier.id === suggestion.modifierId));
+    state.ignoreModifierChange = true;
+    $('#modifier-select').selectedIndex = modifierIndex;
+    state.ignoreModifierChange = false;
     const preset = state.presets[selected];
-    beginConversion(preset);
+    beginConversion(preset, MODIFIERS[modifierIndex]);
   } catch (error) { showToast(error.message); }
 }
 
-function beginConversion(preset) {
+function beginConversion(preset, modifier = MODIFIERS[$('#modifier-select').selectedIndex]) {
   const serial = ++state.conversionSerial;
   if (state.effectTimer) {
     window.clearTimeout(state.effectTimer);
@@ -214,20 +221,21 @@ function beginConversion(preset) {
     if (serial !== state.conversionSerial) return;
     try {
       let result, preview;
-      let detail = preset.name;
+      let detail = modifier.id === 'none' ? preset.name : `${modifier.name} · ${preset.name}`;
       if (preset.type === 'auto') {
-        const fitted = fitAutoPreset(state.preparedSamples, state.profiles, preset, (current, total) => {
+        const fitted = fitAutoPreset(state.preparedSamples, state.profiles, preset, modifier.id, (current, total) => {
           $('#converted-detail').textContent = `Testing profile ${current} of ${total}…`;
         });
         result = fitted.result;
         const basis = state.presets.find(item => item.id === fitted.basis);
-        detail = `${preset.name} · based on ${basis?.name ?? fitted.basis}`;
+        detail = `${detail} · based on ${basis?.name ?? fitted.basis}`;
       } else if (preset.options?.precise) {
         const fitted = fitPrecisePreset(state.preparedSamples, state.stereoBalance);
-        result = fitted.result;
-        preview = fitted.preview;
+        result = applyModifier(fitted.result, modifier.id);
+        preview = modifier.id === 'none' ? fitted.preview : renderPreview(result);
       } else {
-        result = convert(state.preparedSamples, { ...preset.options, stereoBalance: state.stereoBalance });
+        result = applyModifier(convert(state.preparedSamples,
+          { ...preset.options, stereoBalance: state.stereoBalance }), modifier.id);
       }
       if (serial !== state.conversionSerial) return;
       state.baseProject = { ...result, label: suggestedLabel(state.sourceName) };
@@ -359,6 +367,7 @@ async function initializePresets() {
     state.profiles = state.presets.filter(preset => preset.type === 'profile');
     const select = $('#preset-select');
     select.replaceChildren(...state.presets.map(preset => new Option(preset.name, preset.id)));
+    $('#modifier-select').replaceChildren(...MODIFIERS.map(modifier => new Option(modifier.name, modifier.id)));
   } catch (error) {
     showToast(error.message);
     $('#converter-open').disabled = true;
@@ -379,7 +388,12 @@ $$('#about-dialog [data-url]').forEach(button => button.addEventListener('click'
 $('#preset-select').addEventListener('change', event => {
   if (state.ignorePresetChange || !state.sourcePath) return;
   const preset = state.presets[event.target.selectedIndex];
-  beginConversion(preset);
+  beginConversion(preset, MODIFIERS[$('#modifier-select').selectedIndex]);
+});
+$('#modifier-select').addEventListener('change', event => {
+  if (state.ignoreModifierChange || !state.sourcePath) return;
+  const preset = state.presets[$('#preset-select').selectedIndex];
+  beginConversion(preset, MODIFIERS[event.target.selectedIndex]);
 });
 $('#volume-input').addEventListener('input', scheduleEffects);
 $('#fade-in-button').addEventListener('click', event => toggleEffect(event.currentTarget));

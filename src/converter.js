@@ -396,9 +396,11 @@ function smooth(notes) {
 export function convert(samples, {
   noisePitch = 92, noiseGain = 1, minHz = 120, maxHz = 1100,
   stepFrames = 2, secondGain = 1, noiseMode = 'fixed', smoothing = 'legacy',
-  precise = false, stereoBalance = null, preciseTuning = {},
+  precise = false, tracking = null, pitchShift = 0,
+  stereoBalance = null, preciseTuning = {},
 } = {}) {
   if (!samples.length) throw new Error('There are no samples to convert.');
+  if (tracking) return convertTracked(samples, stereoBalance, tracking, pitchShift);
   if (precise) return convertPrecise(samples, stereoBalance, preciseTuning);
   if (![1, 2].includes(stepFrames)) throw new Error('Step size must be one or two frames.');
   const frames = Math.ceil(samples.length / FRAME_SAMPLES);
@@ -635,6 +637,457 @@ function compactNotes(notes, kind) {
   return result;
 }
 
+function frameRms(samples, frames) {
+  const levels = new Float64Array(frames);
+  for (let frame = 0; frame < frames; frame++) {
+    let sum = 0, count = 0;
+    for (let i = frame * FRAME_SAMPLES; i < Math.min(samples.length, (frame + 1) * FRAME_SAMPLES); i++) {
+      sum += samples[i] * samples[i]; count++;
+    }
+    levels[frame] = Math.sqrt(sum / Math.max(count, 1));
+  }
+  return levels;
+}
+
+// Sirens and tremolo-heavy cries often make a harmonic louder than their
+// fundamental. Long-window autocorrelation follows the repeating waveform
+// instead of that harmonic, avoiding octave jumps and crackly note streams.
+function pitchCandidates(samples, frame, radius) {
+  const first = Math.max(0, (frame - radius) * FRAME_SAMPLES);
+  const last = Math.min(samples.length, (frame + radius + 1) * FRAME_SAMPLES);
+  const minLag = Math.max(2, Math.floor(RATE / 1800));
+  const maxLag = Math.min(last - first - 2, Math.ceil(RATE / 70));
+  const correlations = new Float64Array(maxLag + 1);
+  for (let lag = minLag; lag <= maxLag; lag++) {
+    let cross = 0, left = 0, right = 0;
+    for (let i = first; i + lag < last; i++) {
+      const a = samples[i], b = samples[i + lag];
+      cross += a * b; left += a * a; right += b * b;
+    }
+    correlations[lag] = cross / Math.sqrt(left * right + 1e-20);
+  }
+  const result = [];
+  for (let lag = minLag + 1; lag < maxLag; lag++) {
+    const score = correlations[lag];
+    if (score < 0.12 || score < correlations[lag - 1] || score < correlations[lag + 1]) continue;
+    const curvature = correlations[lag - 1] - 2 * score + correlations[lag + 1];
+    const offset = curvature
+      ? clamp(0.5 * (correlations[lag - 1] - correlations[lag + 1]) / curvature, -0.5, 0.5) : 0;
+    const hz = RATE / (lag + offset);
+    result.push({ hz, score: score + 0.035 * Math.sqrt(hz / 1800) });
+  }
+  result.sort((a, b) => b.score - a.score);
+  return result.slice(0, 12);
+}
+
+function selectPitchPath(candidates, jumpCost) {
+  const frames = candidates.length;
+  for (const list of candidates) if (!list.length) list.push({ hz: 220, score: 0 });
+  let paths = candidates[0].map(candidate => ({
+    total: candidate.score, values: [candidate.hz], previousHz: candidate.hz,
+  }));
+  for (let frame = 1; frame < frames; frame++) {
+    const previousPaths = paths;
+    paths = candidates[frame].map(candidate => {
+      let best = null;
+      for (const path of previousPaths) {
+        const jump = Math.abs(Math.log2(candidate.hz / path.previousHz));
+        const total = path.total + candidate.score - jumpCost * jump;
+        if (!best || total > best.total)
+          best = { total, values: path.values, previousHz: candidate.hz };
+      }
+      return { total: best.total, values: [...best.values, candidate.hz], previousHz: candidate.hz };
+    });
+  }
+  return paths.reduce((best, path) => path.total > best.total ? path : best).values;
+}
+
+function trackedPitch(samples, frames, mode) {
+  if (mode === 'tremolo') {
+    // Use the wider path only as an octave/subharmonic guard. Pitch itself is
+    // still chosen from one-frame windows, retaining the rapid modulation.
+    const guideCandidates = Array.from({ length: frames }, (_, frame) => pitchCandidates(samples, frame, 2));
+    const guide = selectPitchPath(guideCandidates, 0.72);
+    const candidates = Array.from({ length: frames }, (_, frame) => {
+      const fast = pitchCandidates(samples, frame, 0).filter(candidate =>
+        Math.abs(Math.log2(candidate.hz / guide[frame])) < 0.4);
+      return fast.length ? fast : [{ hz: guide[frame], score: 0 }];
+    });
+    const values = selectPitchPath(candidates, 0.25);
+    const center = Math.exp(median(values.map(Math.log)));
+    // Exaggerate the source contour slightly without moving its center pitch.
+    return values.map(hz => clamp(center * (hz / center) ** 1.25, 70, 1800));
+  }
+  // Establish one coherent octave with a broad window, then let the shorter
+  // windows add movement only within that register. This rejects half/double
+  // frequency candidates without flattening the siren-shaped contour.
+  const guideCandidates = Array.from({ length: frames }, (_, frame) => pitchCandidates(samples, frame, 4));
+  const guide = selectPitchPath(guideCandidates, 1.65);
+  const candidates = Array.from({ length: frames }, (_, frame) => {
+    const adjusted = pitchCandidates(samples, frame, 1).map(candidate => {
+      const octaves = [candidate.hz / 2, candidate.hz, candidate.hz * 2]
+        .filter(hz => hz >= 70 && hz <= 1800);
+      const hz = octaves.reduce((best, value) =>
+        Math.abs(Math.log2(value / guide[frame])) < Math.abs(Math.log2(best / guide[frame])) ? value : best);
+      return { ...candidate, hz };
+    }).filter(candidate => Math.abs(Math.log2(candidate.hz / guide[frame])) < 0.32);
+    return adjusted.length ? adjusted : [{ hz: guide[frame], score: 0 }];
+  });
+  let values = selectPitchPath(candidates, 1.2);
+  values = values.map((_, frame) => median(values.slice(Math.max(0, frame - 2), frame + 3)));
+  const smoothed = values.map((_, frame) => {
+    let total = 0, weight = 0;
+    for (let offset = -2; offset <= 2; offset++) {
+      const index = clamp(frame + offset, 0, frames - 1);
+      const amount = 3 - Math.abs(offset);
+      total += Math.log(values[index]) * amount; weight += amount;
+    }
+    return Math.exp(total / weight);
+  });
+  return smoothed;
+}
+
+function modal(values, fallback = 0) {
+  const counts = new Map();
+  for (const value of values) counts.set(value, (counts.get(value) ?? 0) + 1);
+  let best = fallback, count = -1;
+  for (const [value, amount] of counts) if (amount > count) { best = value; count = amount; }
+  return best;
+}
+
+function expandNotes(notes, frames) {
+  const expanded = [];
+  for (const note of notes) for (let i = 0; i <= note.duration && expanded.length < frames; i++)
+    expanded.push({ ...note, duration: 0 });
+  while (expanded.length < frames) expanded.push({ ...(expanded.at(-1) ?? {}), duration: 0 });
+  return expanded;
+}
+
+function sweepNotes(frequencies, levels, duty, {
+  maxFrames = 4, turnFrames = 2, maxSweepPeriod = 4, minSweepShift = 4, envelope = 1,
+} = {}) {
+  const registers = frequencies.map(register);
+  const boundaries = [0];
+  let direction = 0;
+  for (let frame = 1; frame < registers.length; frame++) {
+    const delta = registers[frame] - registers[frame - 1];
+    const nextDirection = Math.abs(delta) < 3 ? direction : Math.sign(delta);
+    if ((direction && nextDirection && nextDirection !== direction && frame - boundaries.at(-1) >= turnFrames) ||
+        frame - boundaries.at(-1) >= maxFrames) {
+      boundaries.push(frame); direction = 0;
+    }
+    if (nextDirection) direction = nextDirection;
+  }
+  if (boundaries.at(-1) !== registers.length) boundaries.push(registers.length);
+  const notes = [];
+  for (let part = 0; part + 1 < boundaries.length; part++) {
+    const first = boundaries[part], last = boundaries[part + 1], length = last - first;
+    let best = { error: Infinity, sweep: [0, 8] };
+    const movement = registers[last - 1] - registers[first];
+    const positiveShifts = Array.from({ length: 8 - minSweepShift }, (_, index) => 7 - index);
+    const shifts = Math.abs(movement) < 4 ? [8] :
+      movement > 0 ? positiveShifts : positiveShifts.map(value => -value);
+    for (const signedShift of shifts) {
+      for (let period = signedShift === 8 ? 0 : 1;
+           period <= (signedShift === 8 ? 0 : maxSweepPeriod); period++) {
+        let value = registers[first], error = 0, valid = true;
+        for (let offset = 0; offset < length; offset++) {
+          if (offset && signedShift !== 8) {
+            const interval = period * FRAME_RATE / 128;
+            const previousSteps = Math.floor((offset - 1) / interval);
+            const steps = Math.floor(offset / interval);
+            for (let step = previousSteps; step < steps; step++) {
+              value += signedShift < 0 ? -(value >> -signedShift) : value >> signedShift;
+              if (value < 0 || value > 2047) { valid = false; break; }
+            }
+          }
+          if (!valid) break;
+          error += (value - registers[first + offset]) ** 2;
+        }
+        if (valid && error < best.error) best = { error, sweep: [period, signedShift] };
+      }
+    }
+    const volume = clamp(round(median(levels.slice(first, last))), 0, 15);
+    notes.push({ duration: length - 1, volume, envelope,
+      frequency: registers[first], duty, sweep: best.sweep });
+  }
+  return notes;
+}
+
+function convertTracked(samples, stereoBalance, mode, pitchShift) {
+  if (!['tremolo', 'sustain', 'bulky'].includes(mode))
+    throw new Error('Tracking mode must be “tremolo”, “sustain”, or “bulky”.');
+  if (!Number.isFinite(pitchShift) || pitchShift < -24 || pitchShift > 24)
+    throw new Error('Tracking pitch shift must be between -24 and 24 semitones.');
+  if (mode === 'bulky') return convertBulky(samples, stereoBalance, pitchShift);
+  const pitchScale = 2 ** (pitchShift / 12);
+  const frames = Math.max(1, Math.round(samples.length / FRAME_SAMPLES));
+  const source = samples.subarray(0, Math.min(samples.length, frames * FRAME_SAMPLES));
+  const frequencies = mode === 'tremolo' ? trackedPitch(source, frames, mode) : null;
+  const rms = frameRms(source, frames);
+  const peak = Math.max(...rms, 1e-9);
+  const levels = Array.from(rms, value => value < Math.max(0.0005, peak * 0.012)
+    ? 0 : clamp(round(15 * (value / peak) ** 0.72), 1, 15));
+  const reference = mode === 'sustain' ? convertPrecise(source, null, {
+    waveMode: 'independent', waveExclusionBins: 12, waveHighBias: 0,
+    waveMinHz: 70, primaryMinHz: 120, secondStability: 0.12,
+    waveFitThreshold: 0.65, noiseStrength: 1.5, noisePitch: 100,
+  }) : convertPrecise(source, null, {
+    waveMode: 'shared', pulseWaveBlend: 1, waveFitThreshold: 1,
+    secondStability: 0.08, noiseStrength: 0,
+  });
+  const referenceSquare = expandNotes(reference.channels.ch5, frames);
+  const duty = mode === 'sustain' ? 1 :
+    modal(referenceSquare.filter((_, frame) => levels[frame]).map(note => note.duty), 2);
+  let ch5, ch6 = [], ch7 = [], ch8 = [];
+  if (mode === 'sustain') {
+    // Begin with the exact layered Precise reconstruction. Only channel 5 is
+    // changed: fold its isolated harmonic mistakes into the melody's octave,
+    // smooth that contour, and express it as longer hardware sweeps. Precise's
+    // square, wave, and noise texture stays untouched on channels 6–8.
+    const activeHz = referenceSquare.filter(note => note.volume)
+      .map(note => 131072 / (2048 - note.frequency));
+    const octaveCenter = Math.exp(median(activeHz.map(Math.log)));
+    let melody = referenceSquare.map(note => {
+      if (!note.volume) return octaveCenter;
+      const hz = 131072 / (2048 - note.frequency);
+      return [-2, -1, 0, 1, 2].map(octave => hz * 2 ** octave)
+        .filter(value => value >= 64 && value <= 1800)
+        .reduce((best, value) => Math.abs(Math.log2(value / octaveCenter)) <
+          Math.abs(Math.log2(best / octaveCenter)) ? value : best);
+    });
+    melody = melody.map((_, frame) => median(melody.slice(Math.max(0, frame - 2), frame + 3)));
+    melody = melody.map((_, frame) => {
+      const left = melody[Math.max(0, frame - 1)], right = melody[Math.min(frames - 1, frame + 1)];
+      return clamp(Math.exp((Math.log(left) + 2 * Math.log(melody[frame]) + Math.log(right)) / 4) *
+        pitchScale, 64, 4200);
+    });
+    const preciseLevels = referenceSquare.map(note => note.volume);
+    ch5 = sweepNotes(melody, preciseLevels, duty, {
+      maxFrames: 12, turnFrames: 4, maxSweepPeriod: 6, minSweepShift: 6, envelope: 8,
+    });
+    let frame = 0;
+    for (const note of ch5) {
+      note.duty = modal(referenceSquare.slice(frame, frame + note.duration + 1)
+        .filter(item => item.volume).map(item => item.duty), duty);
+      frame += note.duration + 1;
+    }
+    ch6 = reference.channels.ch6.map(note => {
+      if (!note.volume || pitchScale === 1) return { ...note };
+      const hz = 131072 / (2048 - note.frequency) * pitchScale;
+      return { ...note, frequency: register(hz) };
+    });
+    ch7 = reference.channels.ch7.map(note => {
+      if (!note.volume || pitchScale === 1) return { ...note };
+      const hz = 65536 / (2048 - note.frequency) * pitchScale;
+      return { ...note, frequency: clamp(round(2048 - 65536 / hz), 0, 2047) };
+    });
+    ch8 = reference.channels.ch8.map(note => ({ ...note }));
+  } else {
+    // The melodic warble remains continuous on channel 5. The alternating
+    // pulse-width effect lives on channel 6, so its retriggers cannot cut off
+    // the pitch sweep.
+    const shiftedFrequencies = frequencies.map(hz => clamp(hz * pitchScale, 64, 1800));
+    ch5 = sweepNotes(shiftedFrequencies, levels, duty, {
+      maxFrames: 4, turnFrames: 2, maxSweepPeriod: 4, envelope: 8,
+    });
+    const phaseDuties = [1, 2, 3, 2];
+    ch6 = shiftedFrequencies.map((hz, frame) => ({
+      duration: 0, volume: round(levels[frame] * 0.38), envelope: 8,
+      frequency: register(hz * 2), duty: 1, dutyPattern: phaseDuties,
+    }));
+    ch6 = compactEffectNotes(ch6);
+  }
+  let pan = null;
+  if (Number.isFinite(stereoBalance)) {
+    const balance = clamp(stereoBalance, 0, 1);
+    const louder = Math.max(balance, 1 - balance);
+    pan = balance <= 0.1 ? { left: 0, right: 7, route: 'right' } :
+      balance >= 0.9 ? { left: 7, right: 0, route: 'left' } :
+      { left: clamp(round(8 * balance / louder) - 1, 0, 7),
+        right: clamp(round(8 * (1 - balance) / louder) - 1, 0, 7), route: 'both' };
+  }
+  return {
+    channels: { ch5, ch6, ch7, ch8 }, frames,
+    sourceDuration: samples.length / RATE, previewDuration: frames / FRAME_RATE,
+    precise: true, tracking: mode, pan,
+  };
+}
+
+const BULKY_DUTY_PATTERNS = [
+  [0, 3, 0, 3],
+  [1, 1, 2, 2],
+  [2, 2, 1, 1],
+  [3, 3, 0, 0],
+];
+const BULKY_NOISE_REGISTERS = [36, 44, 52, 60, 68, 76, 84, 92, 100, 108, 116, 124];
+const NOISE_DIVISORS = [8, 16, 32, 48, 64, 80, 96, 112];
+
+// Compare the useful spectral shape of each stock-compatible NR43 setting.
+// Both LFSR widths are represented: 15-bit noise supplies broad impact while
+// 7-bit noise supplies the pitched rasp used throughout the low Kanto cries.
+const BULKY_NOISE_SIGNATURES = BULKY_NOISE_REGISTERS.map(frequency => {
+  const samples = new Float64Array(FRAME_SAMPLES * 8);
+  const shift = frequency >> 4;
+  const divisor = NOISE_DIVISORS[frequency & 7];
+  const width7 = Boolean(frequency & 8);
+  let lfsr = 0x7fff, phase = 0;
+  for (let i = 0; i < samples.length; i++) {
+    phase += 4194304 / (divisor * 2 ** shift * RATE);
+    let steps = Math.floor(phase);
+    phase -= steps;
+    while (steps-- > 0) {
+      const feedback = (lfsr ^ (lfsr >> 1)) & 1;
+      lfsr = (lfsr >> 1) | (feedback << 14);
+      if (width7) lfsr = (lfsr & ~(1 << 6)) | (feedback << 6);
+    }
+    samples[i] = lfsr & 1 ? -1 : 1;
+  }
+  const analysis = waveformWindow(samples, 0, samples.length);
+  const total = analysis.bands.reduce((sum, value) => sum + value, 0) || 1;
+  return { frequency, shares: analysis.bands.map(value => value / total) };
+});
+
+function bulkyNoiseFrequency(analysis, previous) {
+  const total = analysis.bands.reduce((sum, value) => sum + value, 0) || 1;
+  const shares = analysis.bands.map(value => value / total);
+  let best = null;
+  for (const candidate of BULKY_NOISE_SIGNATURES) {
+    let error = 0;
+    for (let band = 0; band < shares.length; band++) {
+      // Low and middle bands carry perceived weight; upper bands distinguish
+      // broad 15-bit hits from the metallic 7-bit texture of stock cries.
+      const weight = band < 7 ? 1 : 0.55;
+      error += weight * (Math.sqrt(shares[band]) - Math.sqrt(candidate.shares[band])) ** 2;
+    }
+    if (previous !== null) {
+      error += 0.012 * Math.abs((candidate.frequency >> 4) - (previous >> 4));
+      if (Boolean(candidate.frequency & 8) !== Boolean(previous & 8)) error += 0.025;
+    }
+    if (!best || error < best.error) best = { frequency: candidate.frequency, error };
+  }
+  return best.frequency;
+}
+
+function bulkyTonePhrases(notes, kind, fixedDuty = 2) {
+  const result = [];
+  for (let first = 0; first < notes.length; first += 3) {
+    const group = notes.slice(first, first + 3);
+    const active = group.filter(note => note.volume);
+    if (!active.length) {
+      result.push(kind === 'wave'
+        ? { duration: group.length - 1, volume: 0, envelope: 0, frequency: 0 }
+        : { duration: group.length - 1, volume: 0, envelope: 8, frequency: 0, duty: 2 });
+      continue;
+    }
+    const frequency = round(median(active.map(note => note.frequency)));
+    const volume = clamp(round(median(active.map(note => note.volume))), 1, kind === 'wave' ? 3 : 15);
+    if (kind === 'wave') {
+      result.push({ duration: group.length - 1, volume,
+        envelope: modal(active.map(note => note.envelope)), frequency });
+      continue;
+    }
+    const duty = fixedDuty;
+    result.push({ duration: group.length - 1, volume, envelope: 8, frequency, duty,
+      dutyPattern: BULKY_DUTY_PATTERNS[kind === 'primary' ? duty : (duty + 2) & 3] });
+  }
+  return result;
+}
+
+function convertBulky(samples, stereoBalance, pitchShift) {
+  const pitchScale = 2 ** (pitchShift / 12);
+  const frames = Math.max(1, Math.round(samples.length / FRAME_SAMPLES));
+  const source = samples.subarray(0, Math.min(samples.length, frames * FRAME_SAMPLES));
+  const rms = frameRms(source, frames);
+  const peakRms = Math.max(...rms, 1e-9);
+  const base = convert(source, {
+    minHz: 64, maxHz: 1800, stepFrames: 1, secondGain: 1,
+    noiseGain: 0, noiseMode: 'texture', smoothing: 'legacy',
+  });
+  const primary = smooth(base.channels.ch5);
+  const secondary = smooth(base.channels.ch6);
+  const channels = { ch5: [], ch6: [], ch7: [], ch8: [] };
+  for (let frame = 0; frame < frames; frame++) {
+    const first = primary[frame] ?? primary.at(-1);
+    const second = secondary[frame] ?? secondary.at(-1);
+    const strength = rms[frame] / peakRms;
+    const active = rms[frame] >= Math.max(0.0005, peakRms * 0.015);
+    const roughHz = 131072 / (2048 - first.frequency);
+    const lowHz = detectLowHz(source, frame, roughHz);
+    const bodyHz = clamp((lowHz ?? roughHz) * pitchScale, 32, 1800);
+    // Pulse hardware bottoms out around 64 Hz. When the source is lower, let
+    // CH3 carry the fundamental and put the first harmonic on CH1.
+    const pulseHz = clamp((lowHz === null ? roughHz : lowHz * 2) * pitchScale, 64, 1800);
+    const secondSourceHz = second?.volume
+      ? 131072 / (2048 - second.frequency)
+      : (lowHz ?? roughHz) * 0.75;
+    const secondHz = clamp(secondSourceHz * pitchScale, 64, 1800);
+    const firstLevel = active ? clamp(round(15 * strength ** 0.68), 1, 15) : 0;
+    const secondLevel = active ? clamp(round(12 * strength ** 0.72), 1, 12) : 0;
+    const firstDuty = first.duty ?? 2;
+    const secondDuty = second?.duty ?? ((firstDuty + 2) & 3);
+    channels.ch5.push({
+      duration: 0, volume: firstLevel, envelope: 8,
+      frequency: register(pulseHz), duty: firstDuty,
+      dutyPattern: BULKY_DUTY_PATTERNS[firstDuty],
+    });
+    channels.ch6.push({
+      duration: 0, volume: secondLevel, envelope: 8,
+      frequency: register(secondHz), duty: secondDuty,
+      dutyPattern: BULKY_DUTY_PATTERNS[(secondDuty + 2) & 3],
+    });
+    const wave = bestWave(source, frame, bodyHz);
+    channels.ch7.push({
+      duration: 0,
+      volume: active ? (strength > 0.45 || lowHz !== null ? 2 : 3) : 0,
+      envelope: wave.index,
+      frequency: clamp(round(2048 - 65536 / bodyHz), 0, 2047),
+    });
+  }
+
+  // Stock low cries use a handful of longer noise commands instead of
+  // retriggering the LFSR every frame. Six-frame phrases preserve that impact,
+  // allow envelope decay to work, and still follow timbral changes in the WAV.
+  let previousNoise = null;
+  for (let first = 0; first < frames; first += 6) {
+    const last = Math.min(frames, first + 6);
+    const analysis = waveformWindow(source, first * FRAME_SAMPLES,
+      Math.min(source.length, last * FRAME_SAMPLES));
+    const frequency = bulkyNoiseFrequency(analysis, previousNoise);
+    previousNoise = frequency;
+    const strength = Math.max(...rms.slice(first, last)) / peakRms;
+    const active = strength >= 0.015;
+    const texture = clamp((analysis.flatness - 0.22) / 0.5, 0, 1);
+    const volume = active
+      ? clamp(round((7 + 8 * texture) * strength ** 0.68), 1, 15)
+      : 0;
+    const tail = rms[last - 1] / peakRms;
+    const expectedDrop = Math.max(0, volume - (7 + 8 * texture) * tail ** 0.68);
+    const envelope = expectedDrop >= 0.8
+      ? clamp(round((last - first - 1) * FRAME_RATE / 64 / expectedDrop), 1, 7)
+      : 8;
+    channels.ch8.push({ duration: last - first - 1, volume, envelope, frequency });
+  }
+  const primaryDuty = modal(channels.ch5.filter(note => note.volume).map(note => note.duty), 2);
+  const secondaryDuty = modal(channels.ch6.filter(note => note.volume).map(note => note.duty), 1);
+  channels.ch5 = bulkyTonePhrases(channels.ch5, 'primary', primaryDuty);
+  channels.ch6 = bulkyTonePhrases(channels.ch6, 'secondary', secondaryDuty);
+  channels.ch7 = bulkyTonePhrases(channels.ch7, 'wave');
+  let pan = null;
+  if (Number.isFinite(stereoBalance)) {
+    const balance = clamp(stereoBalance, 0, 1);
+    const louder = Math.max(balance, 1 - balance);
+    pan = balance <= 0.1 ? { left: 0, right: 7, route: 'right' } :
+      balance >= 0.9 ? { left: 7, right: 0, route: 'left' } :
+      { left: clamp(round(8 * balance / louder) - 1, 0, 7),
+        right: clamp(round(8 * (1 - balance) / louder) - 1, 0, 7), route: 'both' };
+  }
+  return {
+    channels, frames, sourceDuration: samples.length / RATE,
+    previewDuration: frames / FRAME_RATE, precise: true, tracking: 'bulky', pan,
+  };
+}
+
 function convertPrecise(samples, stereoBalance, tuning = {}) {
   const config = {
     waveMode: 'shared', waveExclusionBins: 4, waveMinHz: 110,
@@ -748,11 +1201,26 @@ export function makeAsm(project, sourceName = 'source.wav') {
       lines.push(`\tvolume ${project.pan.left}, ${project.pan.right}`);
     if (project.pan?.route === 'left') lines.push('\tforce_stereo_panning TRUE, FALSE');
     if (project.pan?.route === 'right') lines.push('\tforce_stereo_panning FALSE, TRUE');
-    let previousDuty = -1;
+    let previousDuty = -1, previousPattern = null, previousSweep = null;
     for (const note of project.channels[key]) {
       validateNote(note, kind);
-      if (kind === 'square' && note.volume > 0 && note.duty !== previousDuty) {
-        lines.push(`\tduty_cycle ${note.duty}`); previousDuty = note.duty;
+      if (kind === 'square' && note.volume > 0) {
+        const pattern = note.dutyPattern ? JSON.stringify(note.dutyPattern) : null;
+        if (pattern && pattern !== previousPattern) {
+          lines.push(`\tduty_cycle_pattern ${note.dutyPattern.join(', ')}`);
+          previousPattern = pattern; previousDuty = -1;
+        } else if (!pattern && (previousPattern !== null || note.duty !== previousDuty)) {
+          lines.push(`\tduty_cycle ${note.duty}`);
+          previousPattern = null; previousDuty = note.duty;
+        }
+        if (key === 'ch5' && (note.sweep !== undefined || previousSweep !== null)) {
+          const sweepValues = note.sweep ?? [0, 8];
+          const sweep = JSON.stringify(sweepValues);
+          if (sweep !== previousSweep) {
+            lines.push(`\tpitch_sweep ${sweepValues.join(', ')}`);
+            previousSweep = sweep;
+          }
+        }
       }
       const frequency = kind === 'square' && note.volume === 0 ? 0 : note.frequency;
       lines.push(`\t${kind === 'noise' ? 'noise' : 'square'}_note ${note.duration}, ${note.volume}, ${note.envelope}, ${frequency}`);
@@ -772,6 +1240,15 @@ export function validateNote(note, kind) {
     if (!Number.isInteger(note[name]) || note[name] < low || note[name] > high)
       throw new Error(`${kind} ${name} must be a whole number from ${low} to ${high}.`);
   }
+  if (kind === 'square' && note.dutyPattern !== undefined &&
+      (!Array.isArray(note.dutyPattern) || note.dutyPattern.length !== 4 ||
+       note.dutyPattern.some(value => !Number.isInteger(value) || value < 0 || value > 3)))
+    throw new Error('square duty pattern must contain four whole numbers from 0 to 3.');
+  if (kind === 'square' && note.sweep !== undefined &&
+      (!Array.isArray(note.sweep) || note.sweep.length !== 2 ||
+       !Number.isInteger(note.sweep[0]) || note.sweep[0] < 0 || note.sweep[0] > 15 ||
+       !Number.isInteger(note.sweep[1]) || note.sweep[1] < -7 || note.sweep[1] > 8))
+    throw new Error('square pitch sweep must use a period from 0 to 15 and shift from -7 to 8.');
 }
 
 export function suggestedLabel(filename) {

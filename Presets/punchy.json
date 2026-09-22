@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "id": "bass_punchy",
-  "name": "Bass (Punchy)",
-  "description": "Follows low attacks every frame for compact growls and hard-hitting bass cries.",
+  "id": "punchy",
+  "name": "Punchy",
+  "description": "Follows attacks every frame for compact, hard-hitting cries in the source's natural register.",
   "type": "profile",
   "options": {
-    "minHz": 64,
-    "maxHz": 1100,
+    "minHz": 120,
+    "maxHz": 1400,
     "stepFrames": 1,
     "noisePitch": 75,
     "noiseGain": 1.15,

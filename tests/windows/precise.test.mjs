@@ -106,3 +106,71 @@ test('Precise selects and previews a measured hardware fit', () => {
   const asm = makeAsm({ ...fitted.result, label: 'Measured' });
   assert.ok(parseCryAsm(asm).channels.ch5.length > 0);
 });
+
+test('tracked profiles preserve modulation with hardware-valid patterns and sweeps', () => {
+  const modulated = Float64Array.from({ length: FRAME_SAMPLES * 42 }, (_, i) => {
+    const time = i / RATE;
+    const hz = 310 + 55 * Math.sin(2 * Math.PI * 8 * time);
+    return (0.3 + 0.12 * Math.sin(2 * Math.PI * 6 * time)) * Math.sin(2 * Math.PI * hz * time);
+  });
+  const tremolo = { ...convert(modulated, { tracking: 'tremolo' }), label: 'Tremolo' };
+  assert.equal(tremolo.frames, 42);
+  assert.ok(tremolo.channels.ch5.length < tremolo.frames / 2);
+  assert.ok(tremolo.channels.ch5.some(note => note.sweep && note.sweep[1] !== 8));
+  assert.ok(tremolo.channels.ch6.some(note => note.dutyPattern?.length === 4));
+  assert.equal(tremolo.channels.ch8.length, 0);
+  assert.ok(new Set(tremolo.channels.ch6.map(note => note.frequency)).size > 8);
+  assert.match(makeAsm(tremolo), /duty_cycle_pattern/);
+  assert.doesNotThrow(() => parseCryAsm(makeAsm(tremolo)));
+  const steady = Float64Array.from({ length: FRAME_SAMPLES * 20 }, (_, i) =>
+    0.4 * Math.sin(2 * Math.PI * 440 * i / RATE));
+  const regularTremolo = convert(steady, { tracking: 'tremolo' });
+  const bassTremolo = convert(steady, { tracking: 'tremolo', pitchShift: -12 });
+  const tremoloHz = 131072 / (2048 - regularTremolo.channels.ch5[0].frequency);
+  const bassTremoloHz = 131072 / (2048 - bassTremolo.channels.ch5[0].frequency);
+  assert.ok(Math.abs(bassTremoloHz / tremoloHz - 0.5) < 0.03);
+
+  const gliding = Float64Array.from({ length: FRAME_SAMPLES * 90 }, (_, i) => {
+    const time = i / RATE;
+    return 0.35 * Math.sin(2 * Math.PI * (500 + 260 * time) * time);
+  });
+  const sustain = { ...convert(gliding, { tracking: 'sustain' }), label: 'Sustain' };
+  assert.ok(sustain.channels.ch5.length < sustain.frames / 2);
+  assert.ok(sustain.channels.ch5.some(note => note.sweep && note.sweep[1] !== 8));
+  assert.ok(sustain.channels.ch5.every(note => note.duration <= 11));
+  assert.ok(sustain.channels.ch5.every(note => note.envelope === 8));
+  assert.ok(sustain.channels.ch5.every(note => note.duty >= 0 && note.duty <= 3));
+  assert.ok(sustain.channels.ch5.every(note => !note.sweep || note.sweep[0] <= 6));
+  assert.equal(sustain.channels.ch6.reduce((sum, note) => sum + note.duration + 1, 0), sustain.frames);
+  assert.ok(sustain.channels.ch7.some(note => note.volume));
+  assert.equal(sustain.channels.ch8.reduce((sum, note) => sum + note.duration + 1, 0), sustain.frames);
+  assert.ok(sustain.channels.ch8.filter(note => note.volume).length < sustain.frames / 2);
+  const asm = makeAsm(sustain);
+  assert.match(asm, /pitch_sweep/);
+  assert.doesNotThrow(() => parseCryAsm(asm));
+});
+
+test('Bulky gives low sources four hardware-valid channel roles', () => {
+  const samples = Float64Array.from({ length: FRAME_SAMPLES * 36 }, (_, i) => {
+    const time = i / RATE;
+    const tonal = 0.3 * Math.sin(2 * Math.PI * 82 * time) +
+      0.18 * Math.sin(2 * Math.PI * 164 * time);
+    const impact = i % 29 < 12 ? 0.16 : -0.16;
+    return tonal + impact * Math.exp(-2.5 * time);
+  });
+  const project = { ...convert(samples, { tracking: 'bulky' }), label: 'Bulky' };
+  assert.equal(project.frames, 36);
+  for (const key of ['ch5', 'ch6', 'ch7', 'ch8']) {
+    assert.ok(project.channels[key].some(note => note.volume), `${key} should be active`);
+    assert.equal(project.channels[key].reduce((sum, note) => sum + note.duration + 1, 0), 36);
+  }
+  assert.ok(project.channels.ch5.some(note => note.dutyPattern?.length === 4));
+  assert.ok(project.channels.ch6.some(note => note.dutyPattern?.length === 4));
+  assert.ok(project.channels.ch8.some(note => note.envelope !== 8));
+  assert.ok(project.channels.ch8.every(note => note.frequency >= 36 && note.frequency <= 124));
+  const asm = makeAsm(project);
+  assert.match(asm, /channel_count 4/);
+  assert.match(asm, /channel 7, Cry_Bulky_Ch7/);
+  assert.match(asm, /duty_cycle_pattern/);
+  assert.doesNotThrow(() => parseCryAsm(asm));
+});

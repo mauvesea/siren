@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "hollow",
+  "name": "Hollow",
+  "description": "Adds a controlled hollow resonance while keeping the source's natural register.",
+  "type": "profile",
+  "options": {
+    "minHz": 120,
+    "maxHz": 1100,
+    "stepFrames": 2,
+    "noisePitch": 75,
+    "noiseGain": 1.8,
+    "secondGain": 0.7,
+    "noiseMode": "texture"
+  }
+}

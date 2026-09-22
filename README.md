@@ -16,9 +16,9 @@ This tool is AI assisted.
 ## Using the app
 
 Select **File Converter** at the top of the window, then choose or drop a WAV.
-The application prepares the audio internally, recommends a preset, and
+The application prepares the audio internally, recommends a preset and modifier, and
 synthesizes a converted sound. Listen to the original and converted versions
-in Sound Check, choose another preset to compare, adjust **Volume**, and add
+in Sound Check, choose another preset or modifier to compare, adjust **Volume**, and add
 an optional **Fade In** or **Fade Out**, then select **Export** to
 create an `.asm` file beside the source WAV.
 
@@ -98,6 +98,14 @@ Every profile is a readable JSON file in [`Presets`](Presets). The **Auto**
 preset searches the available profiles for a close match. The menu sorts
 profiles alphabetically by name, with **Auto** first and **Precise** last.
 
+Modifiers are independent of presets and work with every profile. **None**
+keeps the regular preset tone. **Dark** and **Bright** adjust pulse resonance;
+**Low** and **High** transpose tonal channels; **Heavy** and **Light**
+adjust supporting-layer weight; and **Wide** and **Shallow** expand or compress
+the pitch contour. Noise pitch is not transposed. Siren recommends both a base
+preset and a modifier when a WAV is opened, while leaving **None** as the
+initial modifier before a file is analyzed.
+
 **Precise** compares two reconstructions at each playable Game Boy frame and
 keeps the closer measured fit. It uses pokecrystal's fixed wave patterns,
 follows source dynamics, retains overall stereo balance from two-channel WAVs,
@@ -131,7 +139,8 @@ To build only selected formats, pass one or more of `appimage`, `deb`, or `rpm`:
 `make` builds all three Linux packages and the Windows portable executable.
 Use `make linux` to build only the Linux packages, or `make appimage`,
 `make deb`, and `make rpm` to build individual Linux formats. `make windows`
-builds only the Windows executable.
+builds only the Windows executable. When npm is unavailable, the Windows build
+automatically uses Podman or Docker with Electron Builder's Wine image.
 The AppImage is self-contained and targets x86-64 Linux. DEB and RPM packages
 install Siren under `/usr` and depend on the distribution's native GTK,
 libadwaita, GJS, and GStreamer packages. Building requires Podman, or
@@ -181,5 +190,5 @@ to `constants/cry_constants.asm` and a `dba Cry_<Label>` pointer to
 `audio/cry_pointers.asm` in the same position. Assign the species with
 `mon_cry CRY_<LABEL>, 0, 256` in `data/pokemon/cries.asm`.
 
-Arbitrary PCM cannot be represented exactly by two square waves and one noise
-generator, so trying several presets is part of the intended workflow.
+Arbitrary PCM cannot be represented exactly by the Game Boy's pulse, wave, and
+noise generators, so trying several presets is part of the intended workflow.
