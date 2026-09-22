@@ -8,7 +8,7 @@ import GLib from 'gi://GLib';
 import Gst from 'gi://Gst?version=1.0';
 import Gtk from 'gi://Gtk?version=4.0';
 
-import { MAX_BYTES, MAX_SECONDS, makeAsm, makePlaybackWav, prepareWav, readWav, suggestedLabel, convert } from './converter.js';
+import { applyConversionEffects, detectConversionVolume, MAX_BYTES, MAX_SECONDS, makeAsm, makePlaybackWav, prepareWav, readWav, suggestedLabel, convert } from './converter.js';
 import { fitAutoPreset, fitPrecisePreset, suggestPreset } from './preset-engine.js';
 import { loadPresetDirectories } from './preset-loader.js';
 import { renderPreview } from './preview.js';
@@ -91,6 +91,7 @@ class SirenWindow {
   constructor(application, menuModel) {
     this.sourceFile = null;
     this.project = null;
+    this.baseProject = null;
     this.previewFile = null;
     this.originalPreviewFile = null;
     this.validationFile = null;
@@ -99,6 +100,8 @@ class SirenWindow {
     this.validationTimer = 0;
     this.resumeValidation = false;
     this.conversionSerial = 0;
+    this.effectTimer = 0;
+    this.ignoreEffectChanges = false;
     this.ignorePresetChanges = false;
 
     let presetDirectories = (GLib.getenv('SIREN_PRESETS_DIRS') ||
@@ -198,6 +201,7 @@ class SirenWindow {
       this.convertedPlayer.stop();
       this.validationPlayer.stop();
       if (this.validationTimer) GLib.source_remove(this.validationTimer);
+      if (this.effectTimer) GLib.source_remove(this.effectTimer);
       this.validationSerial++;
       this.removePreviewFile();
       this.removeOriginalPreviewFile();
@@ -253,6 +257,34 @@ class SirenWindow {
       this.beginConversion(preset);
     });
     presetGroup.add(this.presetRow);
+
+    const volumeRow = new Adw.ActionRow({
+      title: 'Volume',
+      subtitle: 'Detected from the converted cry · 0% to hardware maximum',
+    });
+    this.volumeScale = new Gtk.Scale({
+      orientation: Gtk.Orientation.HORIZONTAL,
+      adjustment: new Gtk.Adjustment({ value: 0, lower: 0, upper: 100, step_increment: 1, page_increment: 10 }),
+      digits: 0, draw_value: true, value_pos: Gtk.PositionType.RIGHT, width_request: 260,
+      valign: Gtk.Align.CENTER,
+    });
+    this.volumeScale.connect('value-changed', () => this.scheduleEffects());
+    volumeRow.add_suffix(this.volumeScale);
+    presetGroup.add(volumeRow);
+
+    const fadeRow = new Adw.ActionRow({
+      title: 'Fades',
+      subtitle: 'Use stock volume steps over the first or last 25%',
+    });
+    const fadeButtons = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 6, valign: Gtk.Align.CENTER });
+    this.fadeInButton = new Gtk.ToggleButton({ label: 'Fade In' });
+    this.fadeOutButton = new Gtk.ToggleButton({ label: 'Fade Out' });
+    this.fadeInButton.connect('toggled', () => this.scheduleEffects());
+    this.fadeOutButton.connect('toggled', () => this.scheduleEffects());
+    fadeButtons.append(this.fadeInButton);
+    fadeButtons.append(this.fadeOutButton);
+    fadeRow.add_suffix(fadeButtons);
+    presetGroup.add(fadeRow);
     body.append(presetGroup);
 
     const soundGroup = new Adw.PreferencesGroup({
@@ -506,6 +538,7 @@ class SirenWindow {
       this.preparedSamples = preparedSamples;
       this.stereoBalance = prepared.stereoBalance;
       this.project = null;
+      this.baseProject = null;
       this.fileRow.title = file.get_basename();
       this.fileRow.subtitle = `${source.channels} channel${source.channels === 1 ? '' : 's'} · ${source.rate.toLocaleString()} Hz · ${formatDuration(source.duration)}`;
       this.originalRow.subtitle = formatDuration(source.duration);
@@ -529,6 +562,9 @@ class SirenWindow {
     this.spinner.visible = busy;
     this.spinner.spinning = busy;
     this.presetRow.sensitive = !busy;
+    this.volumeScale.sensitive = !busy;
+    this.fadeInButton.sensitive = !busy;
+    this.fadeOutButton.sensitive = !busy;
     this.exportButton.sensitive = !busy && Boolean(this.project);
     this.convertedButton.sensitive = !busy && Boolean(this.previewFile);
     if (message) this.convertedRow.subtitle = message;
@@ -536,6 +572,10 @@ class SirenWindow {
 
   beginConversion(preset) {
     const serial = ++this.conversionSerial;
+    if (this.effectTimer) {
+      GLib.source_remove(this.effectTimer);
+      this.effectTimer = 0;
+    }
     this.convertedPlayer.stop();
     this.setBusy(true, preset.type === 'auto' ? 'Testing conversion profiles…' :
       preset.options?.precise ? 'Comparing hardware fits…' : 'Converting…');
@@ -558,17 +598,48 @@ class SirenWindow {
           result = convert(this.preparedSamples, { ...preset.options, stereoBalance: this.stereoBalance });
         }
         if (serial !== this.conversionSerial) return GLib.SOURCE_REMOVE;
-        this.project = { ...result, label: suggestedLabel(this.sourceFile.get_basename()) };
-        this.writePreview(preview ?? renderPreview(this.project));
+        this.baseProject = { ...result, label: suggestedLabel(this.sourceFile.get_basename()) };
+        this.ignoreEffectChanges = true;
+        this.volumeScale.set_value(detectConversionVolume(this.baseProject));
+        this.ignoreEffectChanges = false;
+        this.applyEffects(preview);
         this.convertedRow.subtitle = `${detail} · ${formatDuration(result.previewDuration ?? result.sourceDuration)}`;
         this.setBusy(false);
       } catch (error) {
         this.project = null;
+        this.baseProject = null;
         this.setBusy(false, 'Conversion failed');
         this.showToast(error.message);
       }
       return GLib.SOURCE_REMOVE;
     });
+  }
+
+  effectOptions() {
+    return {
+      volumePercent: Math.round(this.volumeScale.get_value()),
+      fadeIn: this.fadeInButton.active,
+      fadeOut: this.fadeOutButton.active,
+    };
+  }
+
+  scheduleEffects() {
+    if (this.ignoreEffectChanges || !this.baseProject) return;
+    if (this.effectTimer) GLib.source_remove(this.effectTimer);
+    this.effectTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
+      this.effectTimer = 0;
+      try { this.applyEffects(); }
+      catch (error) { this.showToast(error.message); }
+      return GLib.SOURCE_REMOVE;
+    });
+  }
+
+  applyEffects(defaultPreview = null) {
+    const options = this.effectOptions();
+    this.project = applyConversionEffects(this.baseProject, options);
+    const unchanged = options.volumePercent === detectConversionVolume(this.baseProject) &&
+      !options.fadeIn && !options.fadeOut;
+    this.writePreview(unchanged && defaultPreview ? defaultPreview : renderPreview(this.project));
   }
 
   writePreview(buffer) {

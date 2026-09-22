@@ -79,6 +79,22 @@
                 <div class="row-copy"><strong>Preset</strong></div>
                 <select id="preset-select"></select>
               </label>
+              <label class="settings-row" for="volume-input">
+                <div class="row-icon"><span class="fluent-icon" aria-hidden="true">&#xE767;</span></div>
+                <div class="row-copy"><strong>Volume</strong><span>Detected from the cry · 0% to hardware maximum</span></div>
+                <div class="range-control">
+                  <input id="volume-input" type="range" min="0" max="100" step="1" value="0">
+                  <output id="volume-value" for="volume-input">0%</output>
+                </div>
+              </label>
+              <div class="settings-row">
+                <div class="row-icon"><span class="fluent-icon" aria-hidden="true">&#xE9D9;</span></div>
+                <div class="row-copy"><strong>Fades</strong><span>Stock volume steps over the first or last 25%</span></div>
+                <div class="effect-buttons">
+                  <button class="toggle-button" id="fade-in-button" type="button" aria-pressed="false">Fade In</button>
+                  <button class="toggle-button" id="fade-out-button" type="button" aria-pressed="false">Fade Out</button>
+                </div>
+              </div>
             </div>
           </section>
 

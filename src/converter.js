@@ -431,6 +431,92 @@ export function convert(samples, {
   return { channels, frames, sourceDuration: samples.length / RATE };
 }
 
+const WAVE_OUTPUT_GAINS = [0, 1, 0.5, 0.25];
+
+function scaledVolume(volume, kind, gain) {
+  if (!volume || gain <= 0) return 0;
+  if (gain === 1) return volume;
+  if (kind !== 'wave') return clamp(round(volume * gain), 0, 15);
+  const target = WAVE_OUTPUT_GAINS[volume] * gain;
+  let closest = 0;
+  for (let level = 1; level < WAVE_OUTPUT_GAINS.length; level++)
+    if (Math.abs(WAVE_OUTPUT_GAINS[level] - target) < Math.abs(WAVE_OUTPUT_GAINS[closest] - target))
+      closest = level;
+  return closest;
+}
+
+function sameNote(a, b) {
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  keys.delete('duration');
+  for (const key of keys) {
+    if (Array.isArray(a[key]) || Array.isArray(b[key])) {
+      if (JSON.stringify(a[key]) !== JSON.stringify(b[key])) return false;
+    } else if (a[key] !== b[key]) return false;
+  }
+  return true;
+}
+
+function compactEffectNotes(notes) {
+  const result = [];
+  for (const note of notes) {
+    const previous = result.at(-1);
+    if (previous && sameNote(previous, note) && previous.duration < 254) previous.duration++;
+    else result.push({ ...note });
+  }
+  return result;
+}
+
+// Report the loudest hardware level already present in a converted cry.
+export function detectConversionVolume(project) {
+  let peak = 0;
+  for (const [key, notes] of Object.entries(project.channels)) {
+    const kind = key === 'ch7' ? 'wave' : key === 'ch8' ? 'noise' : 'square';
+    for (const note of notes)
+      peak = Math.max(peak, kind === 'wave' ? WAVE_OUTPUT_GAINS[note.volume] : note.volume / 15);
+  }
+  return round(peak * 100);
+}
+
+// Apply only effects that pokecrystal's stock PSG note commands can reproduce.
+// The detected value intentionally leaves the converter's existing levels unchanged.
+export function applyConversionEffects(project, {
+  volumePercent = null, fadeIn = false, fadeOut = false,
+} = {}) {
+  const detectedVolume = detectConversionVolume(project);
+  if (volumePercent === null) volumePercent = detectedVolume;
+  if (!Number.isInteger(volumePercent) || volumePercent < 0 || volumePercent > 100)
+    throw new Error('Volume must be a whole percentage from 0 to 100.');
+  const gain = volumePercent === detectedVolume ? 1 :
+    detectedVolume ? volumePercent / detectedVolume : 0;
+  const channels = {};
+  const totalFrames = project.frames ?? Math.max(1, ...Object.values(project.channels).map(notes =>
+    notes.reduce((sum, note) => sum + note.duration + 1, 0)));
+  const fadeFrames = Math.min(totalFrames, Math.max(2, round(totalFrames / 4)));
+  const fadeAt = frame => {
+    let value = 1;
+    if (fadeIn && fadeFrames > 1 && frame < fadeFrames)
+      value = Math.min(value, frame / (fadeFrames - 1));
+    if (fadeOut && fadeFrames > 1 && frame >= totalFrames - fadeFrames)
+      value = Math.min(value, (totalFrames - 1 - frame) / (fadeFrames - 1));
+    return clamp(value, 0, 1);
+  };
+  for (const [key, notes] of Object.entries(project.channels)) {
+    const kind = key === 'ch7' ? 'wave' : key === 'ch8' ? 'noise' : 'square';
+    if (!fadeIn && !fadeOut) {
+      channels[key] = notes.map(note => ({ ...note, volume: scaledVolume(note.volume, kind, gain) }));
+      continue;
+    }
+    const expanded = [];
+    let frame = 0;
+    for (const note of notes) {
+      for (let offset = 0; offset <= note.duration; offset++, frame++)
+        expanded.push({ ...note, duration: 0, volume: scaledVolume(note.volume, kind, gain * fadeAt(frame)) });
+    }
+    channels[key] = compactEffectNotes(expanded);
+  }
+  return { ...project, channels, effects: { volumePercent, detectedVolume, fadeIn, fadeOut } };
+}
+
 const WAVE_HARMONICS = WAVE_SAMPLES.map(wave => {
   const magnitudes = [];
   for (let harmonic = 1; harmonic <= 8; harmonic++) {
