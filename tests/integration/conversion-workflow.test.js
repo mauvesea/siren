@@ -3,7 +3,7 @@ import GLib from 'gi://GLib';
 
 import { applyConversionEffects, convert, encodeWav, makeAsm, makePlaybackWav, prepareWav, readWav } from '../../src/converter.js';
 import { parseCryAsm } from '../../src/cry-asm.js';
-import { fitAutoPreset, fitPrecisePreset, suggestPreset } from '../../src/preset-engine.js';
+import { fitAutoPreset, fitPrecisePreset, scoreProfilePresets, suggestPreset } from '../../src/preset-engine.js';
 import { loadPresets } from '../../src/preset-loader.js';
 import { renderPreview } from '../../src/preview.js';
 
@@ -32,20 +32,21 @@ const presets = loadPresets(GLib.build_filenamev([root, 'Presets']));
 const profiles = presets.filter(preset => preset.type === 'profile');
 const autoPreset = presets.find(preset => preset.type === 'auto');
 
-assert(presets.length === 22, 'Expected all 22 presets.');
-assert(profiles.length === 21, 'Expected 21 fixed conversion profiles.');
-assert(presets[0].id === 'auto', 'Auto must be the first preset.');
+assert(presets.length === 15, 'Expected all 15 effects and conversion modes.');
+assert(profiles.length === 14, 'Expected 14 fixed effects and conversion modes.');
+assert(presets[0].id === 'none', 'None must be the first effect.');
+assert(presets[1].id === 'auto', 'Auto must follow None.');
 assert(presets.at(-1).id === 'precise', 'Precise must be the last preset.');
-assert(presets.slice(1, -1).every((preset, index, middle) =>
+assert(presets.slice(2, -1).every((preset, index, middle) =>
   index === 0 || middle[index - 1].name.localeCompare(preset.name) <= 0),
   'Other presets must be ordered alphabetically by name.');
-assert(presets.find(preset => preset.id === 'clean')?.name === 'Clean',
-  'The former Default preset must be called Clean.');
+assert(presets.find(preset => preset.id === 'none')?.name === 'None',
+  'The clean default must be called None.');
 assert([
-  'bass_clean', 'bass_hollow', 'bass_punchy', 'bass_raspy', 'bass_textured',
-  'bass_vibrato', 'deep_airy', 'deep_vibrato', 'roar', 'vibrato',
-].every(id => profiles.some(preset => preset.id === id)), 'Expected the revised profile presets.');
-assert(['deep_default', 'percussive', 'pure_tone'].every(id =>
+  'none', 'deep', 'tremolo', 'vibrato', 'glissando', 'portamento', 'digital',
+  'fry', 'breathy', 'falsetto', 'gen3', 'gen4', 'gen5', 'precise',
+].every(id => profiles.some(preset => preset.id === id)), 'Expected all Siren 2 effects.');
+assert(['airy', 'bright', 'clean', 'noisy', 'roar', 'textured'].every(id =>
   !presets.some(preset => preset.id === id)), 'Removed presets must stay removed.');
 assert(Boolean(autoPreset), 'Expected the Auto preset.');
 assert(JSON.stringify(autoPreset.search.noiseGainFactors) === JSON.stringify([0, 0.5, 1.5, 2.5]),
@@ -74,13 +75,14 @@ const stereoPlayback = readWav(makePlaybackWav(stereoSource));
 assert(stereoPlayback.channels === 2 && stereoPlayback.samples.length === 44100,
   'Playback normalization should preserve the source channel layout.');
 const prepared = prepareWav(source);
-const cleanPreset = presets.find(preset => preset.id === 'clean');
+const cleanPreset = presets.find(preset => preset.id === 'none');
 const project = { ...convert(readWav(prepared.wav).samples, cleanPreset.options), label: 'TwoTones' };
 assert(project.frames === 17, 'Conversion frame count changed.');
 assert(project.channels.ch5.length === 9, 'Primary channel note count changed.');
 assert(project.channels.ch6.length === 9, 'Secondary channel note count changed.');
+assert(project.channels.ch7.length === 9, 'Wave channel note count changed.');
 assert(project.channels.ch8.length === 9, 'Noise channel note count changed.');
-assert(makeAsm(project, 'two_tones.wav').includes('Cry_TwoTones_Ch8:'), 'ASM output is incomplete.');
+assert(makeAsm(project, 'two_tones.wav').includes('Cry_TwoTones_Ch7:'), 'ASM output is incomplete.');
 assert(readWav(renderPreview(project)).rate === 44100, 'Preview sample rate changed.');
 const louder = applyConversionEffects(project, { volumePercent: 100 });
 assert(louder.channels.ch5.every((note, index) => note.volume >= project.channels.ch5[index].volume),
@@ -103,6 +105,12 @@ assert(suggestPreset(tone(120)).id !== suggestPreset(tone(1400)).id,
   'Automatic recommendation should respond to the WAV spectrum.');
 
 const shortSamples = samples.subarray(0, 5 * 176);
+const scoredProfiles = scoreProfilePresets(shortSamples, [
+  { id: 'none', options: cleanPreset.options },
+  { id: 'gen3', options: presets.find(preset => preset.id === 'gen3').options },
+]);
+assert(scoredProfiles.length === 2 && scoredProfiles.every(item => Number.isFinite(item.score)),
+  'Batch profile scoring should measure every training candidate.');
 const fitted = fitAutoPreset(shortSamples, profiles, autoPreset);
 assert(Number.isFinite(fitted.score), 'Auto did not produce a finite match score.');
 assert(profiles.some(preset => preset.id === fitted.basis), 'Auto chose an unknown profile.');

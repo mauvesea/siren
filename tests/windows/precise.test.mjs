@@ -23,7 +23,8 @@ test('Precise emits a playable wave cry with hardware-correct pitch and frame co
   for (const notes of Object.values(played.channels))
     if (notes.length) assert.equal(notes.reduce((sum, note) => sum + note.frames, 0), 21);
   const preview = readWav(renderPreview(project));
-  assert.ok(Math.abs(preview.duration - 21 / FRAME_RATE) < 1 / preview.rate);
+  assert.ok(Math.abs(preview.duration - 22 / FRAME_RATE) < 1 / preview.rate,
+    'Preview should include the silent sound_ret update after the last audible frame.');
   assert.ok(preview.samples.some(sample => Math.abs(sample) > 0.05));
 });
 

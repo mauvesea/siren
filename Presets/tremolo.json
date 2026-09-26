@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "id": "tremolo",
+  "name": "Tremolo",
+  "description": "Regular volume movement while pitch remains steady.",
+  "type": "profile",
+  "options": { "noiseMode": "texture", "effect": "tremolo" }
+}

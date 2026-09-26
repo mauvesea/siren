@@ -1,5 +1,7 @@
-import { makeAsm, readWav } from '../../src/converter.js';
+import { FRAME_RATE, makeAsm, readWav } from '../../src/converter.js';
 import { applyCryParameters, parseCryAsm } from '../../src/cry-asm.js';
+import { indexCryDefinitionSources, parseCryConstants, parseCryDefinitionLabels, parseCryList, parseCryPointers,
+  renderCryList, resolveCryDefinitionSources } from '../../src/cry-list.js';
 import { renderPreview } from '../../src/preview.js';
 
 function assert(condition, message) { if (!condition) throw new Error(message); }
@@ -33,6 +35,29 @@ assert(changed.channels.ch8[0].frames === 2, 'Length should not alter noise timi
 assert(readWav(renderPreview(changed)).rate === 44100, 'Adjusted cry must be a playable WAV.');
 assert(readWav(renderPreview(changed)).samples.length > readWav(renderPreview(defaultPlayback)).samples.length,
   'Longer length should produce a longer preview.');
+const expectedDefaultFrames = Math.max(...Object.values(defaultPlayback.channels)
+  .map(notes => notes.reduce((sum, note) => sum + note.frames, 0))) + 1;
+const defaultPreview = readWav(renderPreview(defaultPlayback));
+assert(Math.abs(defaultPreview.duration - expectedDefaultFrames / FRAME_RATE) < 1 / 44100,
+  'Cry previews should retain a silent sound_ret frame instead of ending on the final audible sample.');
+assert(Math.abs(defaultPreview.samples.at(-1)) < 1e-6,
+  'The output filter should settle before preview end-of-stream.');
+
+const bulbasaurTail = parseCryAsm(`
+Cry_Bulbasaur:
+  channel_count 1
+  channel 8, Cry_Bulbasaur_Ch8
+Cry_Bulbasaur_Ch8:
+  noise_note 3, 14, 4, 60
+  noise_note 12, 13, 6, 44
+  noise_note 4, 14, 4, 60
+  noise_note 8, 11, 7, 92
+  noise_note 15, 12, 2, 93
+  sound_ret
+`);
+const bulbasaurPreview = readWav(renderPreview(applyCryParameters(bulbasaurTail, 128, 129)));
+assert(Math.abs(bulbasaurPreview.duration - 0.88) < 0.001,
+  'A final decaying hardware envelope should ring out instead of being cut off at sound_ret.');
 
 const native = `
 Cry_Example:
@@ -76,5 +101,38 @@ rejects(() => applyCryParameters(cry, 0, -1), 'Length must');
 rejects(() => parseCryAsm(native.replace('sound_loop 2', 'sound_loop 0')), 'infinite sound_loop');
 rejects(() => parseCryAsm(native.replace('pitch_sweep 15, -7', 'vibrato 1, 2, 3')),
   'cannot be previewed accurately');
+
+const listSource = `MACRO mon_cry\n\tdw \\1, \\2, \\3\nENDM\n\nOldPokemonCries::\n\tmon_cry CRY_EXAMPLE, $080, $081 ; Example\n\tcustom_cry CRY_OTHER, $fff0, 256\n\tassert_table_length 2\n`;
+const list = parseCryList(listSource);
+assert(list.entries.length === 2, 'Cry-list parser should ignore macro bodies and retain data rows.');
+assert(list.entries[0].pitch === 128 && list.entries[0].length === 129,
+  'Cry-list hexadecimal values should become decimal values.');
+assert(list.entries[1].pitch === -16 && list.entries[1].species === '',
+  'Cry-list rows may use signed hexadecimal, another macro, and no species comment.');
+const rewritten = renderCryList(list, [
+  { ...list.entries[0], pitch: 200, species: 'Edited Example' },
+  { ...list.entries[1] },
+]);
+assert(rewritten.includes('\tmon_cry CRY_EXAMPLE, 200, 129 ; Edited Example'),
+  'Edited cry-list rows should be serialized in decimal.');
+assert(rewritten.includes('\tcustom_cry CRY_OTHER, $fff0, 256'),
+  'Unedited cry-list rows must remain byte-for-byte intact.');
+const mixedLines = parseCryList('List::\r\n\tmon_cry CRY_EXAMPLE, 0, 256 ; Example\n\tassert 1\r\n');
+assert(renderCryList(mixedLines, [{ ...mixedLines.entries[0], pitch: 1 }]).endsWith('\n\tassert 1\r\n'),
+  'Saving must preserve untouched lines and their original line endings.');
+const constants = parseCryConstants('; CRY_COMMENT_ONLY\nconst CRY_EXAMPLE\nDEF CRY_OTHER EQU 2\n');
+assert(constants.join(',') === 'CRY_EXAMPLE,CRY_OTHER', 'Cry constants should ignore comments and retain source order.');
+const labels = parseCryDefinitionLabels(`${native}\nCry_other:\n  channel_count 1\n`);
+assert(labels.get('CRY_EXAMPLE') === 'Cry_Example' && labels.get('CRY_OTHER') === 'Cry_other',
+  'Cry constants should map case-insensitively to their actual ASM labels.');
+const indexed = indexCryDefinitionSources([native, 'Cry_Separate:\n channel_count 1\n channel 8, Cry_Separate_Ch8\n']);
+assert(indexed.get('CRY_SEPARATE').source.includes('Cry_Separate'),
+  'Cry definitions in separate audio files should retain their source document.');
+const pointers = parseCryPointers('Cries::\n\tdba Cry_Example\n\tdba Cry_Custom_424\n\tassert_table_length NUM_CRIES\n');
+const resolved = resolveCryDefinitionSources(['CRY_EXAMPLE', 'CRY_AMBIPOM'], pointers,
+  [native, 'Cry_Custom_424:\n channel_count 1\n channel 8, Cry_Custom_424_Ch8\n']);
+assert(resolved.get('CRY_AMBIPOM').label === 'Cry_Custom_424',
+  'Constants should resolve through the positionally corresponding cry pointer, even when labels differ.');
+rejects(() => resolveCryDefinitionSources(['CRY_EXAMPLE'], pointers, [native]), 'has 1 entries');
 
 print('Siren parameter validation tests passed.');

@@ -5,3 +5,4 @@ dist/
 *.deb
 *.AppImage
 *.rpm
+training/

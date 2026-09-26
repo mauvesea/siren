@@ -5,6 +5,7 @@ export const FRAME_SAMPLES = 176;
 export const FRAME_RATE = 4194304 / 70224;
 export const MAX_SECONDS = 5;
 export const MAX_BYTES = 20 * 1024 * 1024;
+export const SIREN_VERSION = '2.0.0';
 const FFT_SIZE = 4096;
 const BIN_HZ = RATE / FFT_SIZE;
 const DUTIES = [0.125, 0.25, 0.5, 0.75];
@@ -396,7 +397,7 @@ function smooth(notes) {
 export function convert(samples, {
   noisePitch = 92, noiseGain = 1, minHz = 120, maxHz = 1100,
   stepFrames = 2, secondGain = 1, noiseMode = 'fixed', smoothing = 'legacy',
-  precise = false, stereoBalance = null, preciseTuning = {},
+  precise = false, stereoBalance = null, preciseTuning = {}, effect = 'none',
 } = {}) {
   if (!samples.length) throw new Error('There are no samples to convert.');
   if (precise) return convertPrecise(samples, stereoBalance, preciseTuning);
@@ -415,12 +416,16 @@ export function convert(samples, {
     if (noiseMode === 'texture') texture.push(waveformWindow(samples, start * FRAME_SAMPLES, Math.min(samples.length, (start + 3) * FRAME_SAMPLES)).flatness);
   }
   const second = coherentSecond(candidates, rms);
-  const channels = { ch5: [], ch6: [], ch8: [] };
+  const channels = { ch5: [], ch6: [], ch7: [], ch8: [] };
   for (let i = 0; i < first.length; i++) {
     const a = ATOMS[first[i].index], b = ATOMS[second[i].index];
     const duration = i === first.length - 1 && frames % stepFrames ? 0 : stepFrames - 1;
     channels.ch5.push({ duration, volume: volume(rms[i], first[i].score, first[i].score), envelope: 8, frequency: register(a.hz), duty: a.duty });
     channels.ch6.push({ duration, volume: clamp(round(volume(rms[i], second[i].score, first[i].score, true) * secondGain), 0, 15), envelope: 8, frequency: register(b.hz), duty: b.duty });
+    // Channel 3's programmable wave gives every effect a softer harmonic layer.
+    // It follows the lead by default and is reshaped by the named effect below.
+    channels.ch7.push({ duration, volume: channels.ch5.at(-1).volume ? 3 : 0,
+      envelope: 1, frequency: clamp(round(2048 - 65536 / a.hz), 0, 2047) });
     const base = clamp(round(5 * Math.min(1, rms[i] / 0.25)), 0, 12);
     const noiseFactor = noiseMode === 'texture' ? clamp((texture[i] - 0.27) / 0.38, 0, 1) : 1;
     channels.ch8.push({ duration, volume: clamp(round(base * noiseGain * noiseFactor), 0, 15), envelope: 8, frequency: noisePitch });
@@ -428,7 +433,83 @@ export function convert(samples, {
   if (smoothing !== 'none') {
     channels.ch5 = smooth(channels.ch5); channels.ch6 = smooth(channels.ch6);
   }
-  return { channels, frames, sourceDuration: samples.length / RATE };
+  return applyNamedEffect({ channels, frames, sourceDuration: samples.length / RATE }, effect);
+}
+
+const EFFECTS = new Set(['none', 'deep', 'tremolo', 'vibrato', 'glissando', 'portamento',
+  'digital', 'fry', 'breathy', 'falsetto']);
+
+function shiftedRegister(value, semitones, kind = 'square') {
+  if (!value || !semitones) return value;
+  const clock = kind === 'wave' ? 65536 : 131072;
+  const hz = clock / Math.max(1, 2048 - value) * 2 ** (semitones / 12);
+  return clamp(round(2048 - clock / hz), 0, 2047);
+}
+
+function mapTimedNotes(notes, callback) {
+  let frame = 0;
+  return notes.map((note, index) => {
+    const changed = callback({ ...note }, frame, index);
+    frame += note.duration + 1;
+    return changed;
+  });
+}
+
+// Named effects are deliberately hardware-native: they alter register values,
+// wave samples and envelopes rather than applying post-processing to the WAV.
+function applyNamedEffect(project, effect) {
+  if (!EFFECTS.has(effect)) throw new Error(`Unknown effect “${effect}”.`);
+  const channels = Object.fromEntries(Object.entries(project.channels).map(([key, notes]) =>
+    [key, notes.map(note => ({ ...note }))]));
+  const pitch = (semitones, key = null) => {
+    for (const channel of key ? [key] : ['ch5', 'ch6', 'ch7'])
+      channels[channel] = mapTimedNotes(channels[channel], note => ({ ...note,
+        frequency: shiftedRegister(note.frequency, semitones, channel === 'ch7' ? 'wave' : 'square') }));
+  };
+  if (effect === 'deep') {
+    pitch(-12);
+    channels.ch5.forEach(note => { note.duty = 2; });
+    channels.ch7.forEach(note => { note.envelope = 4; note.volume = note.volume ? 2 : 0; });
+  } else if (effect === 'falsetto') {
+    pitch(12);
+    channels.ch5.forEach(note => { note.duty = 1; });
+    channels.ch6.forEach(note => { note.duty = 0; note.volume = clamp(note.volume + 2, 0, 15); });
+  } else if (effect === 'vibrato') {
+    for (const key of ['ch5', 'ch6', 'ch7']) channels[key] = mapTimedNotes(channels[key], (note, frame) => ({
+      ...note, frequency: shiftedRegister(note.frequency, Math.sin(frame * Math.PI / 3) * 0.8, key === 'ch7' ? 'wave' : 'square'),
+    }));
+  } else if (effect === 'tremolo') {
+    for (const key of ['ch5', 'ch6', 'ch8']) channels[key] = mapTimedNotes(channels[key], (note, frame) => ({
+      ...note, volume: clamp(round(note.volume * (0.64 + 0.36 * (0.5 + 0.5 * Math.sin(frame * Math.PI / 3)))), 0, 15),
+    }));
+  } else if (effect === 'glissando') {
+    for (const key of ['ch5', 'ch6', 'ch7']) channels[key] = mapTimedNotes(channels[key], (note, frame) => ({
+      ...note, frequency: shiftedRegister(note.frequency, frame * 0.11, key === 'ch7' ? 'wave' : 'square'),
+    }));
+  } else if (effect === 'portamento') {
+    for (const key of ['ch5', 'ch6', 'ch7']) {
+      let previous = null;
+      channels[key] = mapTimedNotes(channels[key], note => {
+        const target = note.frequency;
+        if (previous !== null && note.volume) note.frequency = round(previous * 0.7 + target * 0.3);
+        previous = target;
+        return note;
+      });
+    }
+    channels.ch7.forEach(note => { note.envelope = 0; note.volume = note.volume ? 2 : 0; });
+  } else if (effect === 'digital') {
+    for (const key of ['ch5', 'ch6', 'ch8']) channels[key].forEach(note => { note.envelope = 8; });
+    channels.ch7.forEach(note => { note.envelope = 0; });
+  } else if (effect === 'fry') {
+    pitch(-7);
+    channels.ch7.forEach(note => { note.envelope = 8; note.volume = note.volume ? 1 : 0; });
+    channels.ch8.forEach(note => { note.volume = note.volume ? clamp(round(note.volume * 1.65 + 2), 0, 15) : 0; note.frequency = 44; });
+  } else if (effect === 'breathy') {
+    channels.ch6.forEach(note => { note.duty = 0; note.volume = clamp(round(note.volume * 0.55), 0, 15); note.envelope = 7; });
+    channels.ch7.forEach(note => { note.envelope = 8; note.volume = note.volume ? 3 : 0; });
+    channels.ch8.forEach(note => { note.volume = note.volume ? clamp(round(note.volume * 1.4 + 1), 0, 15) : 0; note.frequency = 44; });
+  }
+  return { ...project, channels, effect };
 }
 
 const WAVE_OUTPUT_GAINS = [0, 1, 0.5, 0.25];
@@ -481,11 +562,18 @@ export function detectConversionVolume(project) {
 // The detected value intentionally leaves the converter's existing levels unchanged.
 export function applyConversionEffects(project, {
   volumePercent = null, fadeIn = false, fadeOut = false,
+  pitch = 0, resonance = 0, weight = 0, intonation = 0, texture = 0, breathiness = 0,
+  enabledChannels = ['ch5', 'ch6', 'ch7', 'ch8'],
 } = {}) {
   const detectedVolume = detectConversionVolume(project);
   if (volumePercent === null) volumePercent = detectedVolume;
   if (!Number.isInteger(volumePercent) || volumePercent < 0 || volumePercent > 100)
     throw new Error('Volume must be a whole percentage from 0 to 100.');
+  for (const [label, value] of Object.entries({ pitch, resonance, weight, intonation, texture, breathiness }))
+    if (!Number.isInteger(value) || value < -100 || value > 100)
+      throw new Error(`${label} must be a whole number from -100 to 100.`);
+  if (!Array.isArray(enabledChannels) || enabledChannels.some(key => !['ch5', 'ch6', 'ch7', 'ch8'].includes(key)))
+    throw new Error('Enabled channels must only contain channels 1–4.');
   const gain = volumePercent === detectedVolume ? 1 :
     detectedVolume ? volumePercent / detectedVolume : 0;
   const channels = {};
@@ -501,20 +589,51 @@ export function applyConversionEffects(project, {
     return clamp(value, 0, 1);
   };
   for (const [key, notes] of Object.entries(project.channels)) {
+    if (!enabledChannels.includes(key)) { channels[key] = []; continue; }
     const kind = key === 'ch7' ? 'wave' : key === 'ch8' ? 'noise' : 'square';
-    if (!fadeIn && !fadeOut) {
-      channels[key] = notes.map(note => ({ ...note, volume: scaledVolume(note.volume, kind, gain) }));
-      continue;
-    }
     const expanded = [];
     let frame = 0;
     for (const note of notes) {
-      for (let offset = 0; offset <= note.duration; offset++, frame++)
-        expanded.push({ ...note, duration: 0, volume: scaledVolume(note.volume, kind, gain * fadeAt(frame)) });
+      for (let offset = 0; offset <= note.duration; offset++, frame++) {
+        const fade = fadeIn || fadeOut ? fadeAt(frame) : 1;
+        const changed = { ...note, duration: 0 };
+        if (kind !== 'noise') {
+          const weightedPitch = pitch * 0.12 - weight * 0.06;
+          changed.frequency = shiftedRegister(changed.frequency, weightedPitch, kind);
+          if (intonation > 0 && changed.volume) {
+            const clock = kind === 'wave' ? 65536 : 131072;
+            const hz = clock / Math.max(1, 2048 - changed.frequency);
+            const midi = 69 + 12 * Math.log2(hz / 440);
+            const snapped = Math.round(midi);
+            const blend = intonation / 100;
+            changed.frequency = shiftedRegister(changed.frequency, (snapped - midi) * blend, kind);
+          } else if (intonation < 0 && changed.volume) {
+            changed.frequency = shiftedRegister(changed.frequency,
+              Math.sin((frame + (key === 'ch6' ? 2 : 0)) * 0.83) * -intonation / 160, kind);
+          }
+        }
+        if (kind === 'square' && changed.volume) {
+          const dutyShift = resonance > 45 ? 1 : resonance < -45 ? -1 : 0;
+          changed.duty = clamp((changed.duty ?? 2) + dutyShift, 0, 3);
+        }
+        if (kind === 'wave' && changed.volume)
+          changed.envelope = clamp(round(changed.envelope + resonance / 25 + texture / 33), 0, 9);
+        let channelGain = gain;
+        if (key === 'ch5') channelGain *= 1 + weight / 250;
+        if (key === 'ch6') channelGain *= 1 - weight / 300 - breathiness / 350;
+        if (key === 'ch7') channelGain *= 1 + resonance / 300 + texture / 250;
+        if (key === 'ch8') channelGain *= 1 + texture / 100 - breathiness / 100;
+        changed.volume = scaledVolume(changed.volume, kind, Math.max(0, channelGain) * fade);
+        if (key === 'ch8' && breathiness < 0 && changed.volume)
+          changed.volume = clamp(changed.volume + round(-breathiness / 25), 0, 15);
+        expanded.push(changed);
+      }
     }
     channels[key] = compactEffectNotes(expanded);
   }
-  return { ...project, channels, effects: { volumePercent, detectedVolume, fadeIn, fadeOut } };
+  return { ...project, channels, enabledChannels: [...enabledChannels], effects: {
+    volumePercent, detectedVolume, fadeIn, fadeOut, pitch, resonance, weight, intonation, texture, breathiness,
+  } };
 }
 
 const WAVE_HARMONICS = WAVE_SAMPLES.map(wave => {
@@ -635,6 +754,31 @@ function compactNotes(notes, kind) {
   return result;
 }
 
+function stabilizeFrameNotes(notes, kind) {
+  const result = notes.map(note => ({ ...note }));
+  if (kind === 'noise') return result;
+  // A frame-by-frame detector naturally jitters by a few register steps. Treat
+  // those as one sustained generator state so the hardware does not retrigger
+  // an envelope every VBlank and produce the characteristic crackle.
+  for (let index = 1; index < result.length; index++) {
+    const previous = result[index - 1];
+    const note = result[index];
+    if (previous.volume && note.volume && Math.abs(previous.frequency - note.frequency) <= 7 &&
+        (kind !== 'square' || previous.duty === note.duty)) {
+      note.frequency = previous.frequency;
+      note.volume = Math.abs(previous.volume - note.volume) <= 1 ? previous.volume : note.volume;
+    }
+    if (!note.volume && previous.volume && result[index + 1]?.volume &&
+        Math.abs(previous.frequency - result[index + 1].frequency) <= 9) {
+      note.volume = Math.min(previous.volume, result[index + 1].volume);
+      note.frequency = previous.frequency;
+      if (kind === 'square') note.duty = previous.duty;
+      if (kind === 'wave') note.envelope = previous.envelope;
+    }
+  }
+  return result;
+}
+
 function convertPrecise(samples, stereoBalance, tuning = {}) {
   const config = {
     waveMode: 'shared', waveExclusionBins: 4, waveMinHz: 110,
@@ -706,7 +850,7 @@ function convertPrecise(samples, stereoBalance, tuning = {}) {
       volume: active ? (config.noiseStrength ? fittedNoise : noise.volume) : 0 });
   }
   for (const [key, kind] of [['ch5', 'square'], ['ch6', 'square'], ['ch7', 'wave'], ['ch8', 'noise']])
-    channels[key] = compactNotes(channels[key], kind);
+    channels[key] = compactNotes(stabilizeFrameNotes(channels[key], kind), kind);
   let pan = null;
   if (Number.isFinite(stereoBalance)) {
     const balance = clamp(stereoBalance, 0, 1);
@@ -727,32 +871,67 @@ function convertPrecise(samples, stereoBalance, tuning = {}) {
 export function makeAsm(project, sourceName = 'source.wav') {
   const label = project.label;
   if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(label)) throw new Error('Cry label must start with a letter and use letters, numbers, or underscores.');
-  const keys = project.precise
-    ? ['ch5', 'ch6', 'ch7', 'ch8'].filter(key => key === 'ch5' || project.channels[key]?.some(note => note.volume))
-    : ['ch5', 'ch6', 'ch8'];
+  const requested = project.enabledChannels ?? ['ch5', 'ch6', 'ch7', 'ch8'];
+  let keys = ['ch5', 'ch6', 'ch7', 'ch8'].filter(key => requested.includes(key) &&
+    project.channels[key]?.length && (key === 'ch5' || project.channels[key].some(note => note.volume)));
+  if (!keys.length) keys = ['ch5'].filter(key => requested.includes(key) && project.channels[key]?.length);
+  if (!keys.length) throw new Error('At least one enabled channel needs a note before exporting.');
+  const metadata = project.conversionMetadata;
+  const cleanHeader = value => String(value).replace(/[\r\n;]/g, ' ').trim();
+  const metadataLines = metadata ? [
+    `; Effect: ${cleanHeader(metadata.effect)}`,
+    `; Volume: ${metadata.volume}%`,
+    `; Fade In: ${metadata.fadeIn ? 'Yes' : 'No'}`,
+    `; Fade Out: ${metadata.fadeOut ? 'Yes' : 'No'}`,
+    `; Channels: ${metadata.channels.join(', ')}`,
+    `; Pitch Level: ${metadata.pitch}`,
+    `; Resonance Level: ${metadata.resonance}`,
+    `; Weight Level: ${metadata.weight}`,
+    `; Intonation Level: ${metadata.intonation}`,
+    `; Texture Level: ${metadata.texture}`,
+    `; Breathiness Level: ${metadata.breathiness}`,
+  ] : [];
   const lines = [
-    '; Generated by Siren',
+    `; Generated by Siren ${SIREN_VERSION}`,
     `; Source: ${sourceName.replace(/[^A-Za-z0-9_. -]/g, '_')}`,
+    ...metadataLines,
     '; Play with pitch 0, length 256.',
     keys.includes('ch7')
       ? '; Stock PSG approximation using square, built-in wave and noise channels.'
-      : '; Approximation with two PSG square channels and PSG noise.',
+      : '; Stock PSG approximation using enabled hardware channels.',
     '', `Cry_${label}:`, `\tchannel_count ${keys.length}`,
     ...keys.map(key => `\tchannel ${key.slice(2)}, Cry_${label}_Ch${key.slice(2)}`), '',
   ];
   for (const [key, kind] of [['ch5', 'square'], ['ch6', 'square'], ['ch7', 'wave'], ['ch8', 'noise']]) {
     if (!keys.includes(key)) continue;
     lines.push(`Cry_${label}_${key[0].toUpperCase()}${key.slice(1)}:`);
-    if (project.pan?.route === 'both' && key === 'ch5' &&
-        (project.pan.left !== 7 || project.pan.right !== 7))
+    if (key === keys[0] && project.pan && (project.pan.left !== 7 || project.pan.right !== 7))
       lines.push(`\tvolume ${project.pan.left}, ${project.pan.right}`);
     if (project.pan?.route === 'left') lines.push('\tforce_stereo_panning TRUE, FALSE');
     if (project.pan?.route === 'right') lines.push('\tforce_stereo_panning FALSE, TRUE');
     let previousDuty = -1;
+    let previousPattern = null, previousPatternId = null;
+    let previousOffset = null, previousSweep = null, previousRoute = project.pan?.route ?? 'both';
     for (const note of project.channels[key]) {
       validateNote(note, kind);
-      if (kind === 'square' && note.volume > 0 && note.duty !== previousDuty) {
-        lines.push(`\tduty_cycle ${note.duty}`); previousDuty = note.duty;
+      const route = note.route ?? previousRoute;
+      if (route !== previousRoute) {
+        lines.push(`\tforce_stereo_panning ${route === 'both' || route === 'left' ? 'TRUE' : 'FALSE'}, ${route === 'both' || route === 'right' ? 'TRUE' : 'FALSE'}`);
+        previousRoute = route;
+      }
+      if (note.offsetOverride !== undefined && note.offsetOverride !== previousOffset) {
+        lines.push(`\tpitch_offset ${note.offsetOverride}`); previousOffset = note.offsetOverride;
+      }
+      if (key === 'ch5' && note.sweep && JSON.stringify(note.sweep) !== JSON.stringify(previousSweep)) {
+        lines.push(`\tpitch_sweep ${note.sweep[0]}, ${note.sweep[1]}`); previousSweep = note.sweep;
+      }
+      const dutyPattern = note.dutyPattern && JSON.stringify(note.dutyPattern);
+      const patternRestarted = note.patternId !== undefined && note.patternId !== previousPatternId;
+      if (kind === 'square' && dutyPattern && (dutyPattern !== previousPattern || patternRestarted)) {
+        lines.push(`\tduty_cycle_pattern ${note.dutyPattern.join(', ')}`);
+        previousPattern = dutyPattern; previousPatternId = note.patternId ?? null; previousDuty = note.dutyPattern[0];
+      } else if (kind === 'square' && note.volume > 0 && (note.duty !== previousDuty || previousPattern !== null)) {
+        lines.push(`\tduty_cycle ${note.duty}`); previousDuty = note.duty; previousPattern = null; previousPatternId = null;
       }
       const frequency = kind === 'square' && note.volume === 0 ? 0 : note.frequency;
       lines.push(`\t${kind === 'noise' ? 'noise' : 'square'}_note ${note.duration}, ${note.volume}, ${note.envelope}, ${frequency}`);
@@ -772,6 +951,17 @@ export function validateNote(note, kind) {
     if (!Number.isInteger(note[name]) || note[name] < low || note[name] > high)
       throw new Error(`${kind} ${name} must be a whole number from ${low} to ${high}.`);
   }
+  if (note.offsetOverride !== undefined && (!Number.isInteger(note.offsetOverride) || note.offsetOverride < -32768 || note.offsetOverride > 65535))
+    throw new Error('pitch offset must be a whole number from -32768 to 65535.');
+  if (note.route !== undefined && !['both', 'left', 'right', 'none'].includes(note.route))
+    throw new Error('stereo route must be both, left, right, or none.');
+  if (note.sweep !== undefined && (kind !== 'square' || !Array.isArray(note.sweep) || note.sweep.length !== 2 ||
+      !Number.isInteger(note.sweep[0]) || note.sweep[0] < 0 || note.sweep[0] > 15 ||
+      !Number.isInteger(note.sweep[1]) || note.sweep[1] < -7 || note.sweep[1] > 8))
+    throw new Error('pitch sweep must contain a period from 0–15 and shift from -7–8.');
+  if (note.dutyPattern !== undefined && (kind !== 'square' || !Array.isArray(note.dutyPattern) ||
+      note.dutyPattern.length !== 4 || note.dutyPattern.some(value => !Number.isInteger(value) || value < 0 || value > 3)))
+    throw new Error('duty pattern must contain four duties from 0–3.');
 }
 
 export function suggestedLabel(filename) {

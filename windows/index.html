@@ -17,20 +17,20 @@
     <nav class="navigation" aria-label="Main navigation">
       <div class="brand">
         <img src="../data/io.github.mauvesea.Siren.svg" alt="" draggable="false">
-        <div><strong>Siren</strong><span>Pokémon cry studio</span></div>
+        <div><strong>Siren</strong></div>
       </div>
       <div class="nav-items">
         <button class="nav-item selected" type="button" data-page="converter" aria-current="page">
-          <span class="fluent-icon" aria-hidden="true">&#xE8D6;</span><span>File converter</span>
+          <span class="fluent-icon" aria-hidden="true">&#xE8D6;</span><span>Converter</span>
         </button>
         <button class="nav-item" type="button" data-page="validation">
-          <span class="fluent-icon" aria-hidden="true">&#xE9D2;</span><span>Parameter validation</span>
+          <span class="fluent-icon" aria-hidden="true">&#xE9D2;</span><span>Editor</span>
+        </button>
+        <button class="nav-item" type="button" data-page="editor">
+          <span class="fluent-icon" aria-hidden="true">&#xE70F;</span><span>Studio</span>
         </button>
       </div>
       <div class="nav-footer">
-        <button class="nav-item" id="new-window-button" type="button">
-          <span class="fluent-icon" aria-hidden="true">&#xE78B;</span><span>New window</span>
-        </button>
         <button class="nav-item" id="about-button" type="button">
           <span class="fluent-icon" aria-hidden="true">&#xE946;</span><span>About Siren</span>
         </button>
@@ -41,8 +41,7 @@
       <section class="page active" id="converter-page" aria-labelledby="converter-title">
         <header class="page-header">
           <div>
-            <h1 id="converter-title">File converter</h1>
-            <p>Shape a WAV recording into three Game Boy sound channels.</p>
+            <h1 id="converter-title">Converter</h1>
           </div>
           <button class="icon-button" id="converter-open-header" type="button" title="Open WAV" aria-label="Open WAV">
             <span class="fluent-icon" aria-hidden="true">&#xE8E5;</span>
@@ -52,7 +51,6 @@
         <div id="converter-empty" class="hero-card drop-surface">
           <div class="hero-icon"><span class="fluent-icon" aria-hidden="true">&#xE8D6;</span></div>
           <h2>Select a WAV</h2>
-          <p>Choose or drop an uncompressed WAV up to 20 MB and 5 seconds long.</p>
           <button class="accent-button" id="converter-open" type="button">
             <span class="fluent-icon" aria-hidden="true">&#xE8E5;</span> Open WAV
           </button>
@@ -72,16 +70,15 @@
 
           <section class="settings-section" aria-labelledby="conversion-heading">
             <h2 id="conversion-heading">Conversion</h2>
-            <p class="section-description">The recommended preset is selected automatically. Switch it at any time to compare results.</p>
             <div class="settings-card">
               <label class="settings-row" for="preset-select">
                 <div class="row-icon"><span class="fluent-icon" aria-hidden="true">&#xE9E9;</span></div>
-                <div class="row-copy"><strong>Preset</strong></div>
+                <div class="row-copy"><strong>Effect</strong></div>
                 <select id="preset-select"></select>
               </label>
               <label class="settings-row" for="volume-input">
                 <div class="row-icon"><span class="fluent-icon" aria-hidden="true">&#xE767;</span></div>
-                <div class="row-copy"><strong>Volume</strong><span>Detected from the cry · 0% to hardware maximum</span></div>
+                <div class="row-copy"><strong>Volume</strong></div>
                 <div class="range-control">
                   <input id="volume-input" type="range" min="0" max="100" step="1" value="0">
                   <output id="volume-value" for="volume-input">0%</output>
@@ -89,18 +86,39 @@
               </label>
               <div class="settings-row">
                 <div class="row-icon"><span class="fluent-icon" aria-hidden="true">&#xE9D9;</span></div>
-                <div class="row-copy"><strong>Fades</strong><span>Stock volume steps over the first or last 25%</span></div>
+                <div class="row-copy"><strong>Fades</strong></div>
                 <div class="effect-buttons">
                   <button class="toggle-button" id="fade-in-button" type="button" aria-pressed="false">Fade In</button>
                   <button class="toggle-button" id="fade-out-button" type="button" aria-pressed="false">Fade Out</button>
                 </div>
               </div>
+              <div class="settings-row channel-settings-row">
+                <div class="row-icon"><span class="fluent-icon" aria-hidden="true">&#xE9D2;</span></div>
+                <div class="row-copy"><strong>Channels</strong></div>
+                <div class="channel-toggles" aria-label="Enabled conversion channels">
+                  <label><input type="checkbox" data-conversion-channel="ch5" checked> 1</label>
+                  <label><input type="checkbox" data-conversion-channel="ch6" checked> 2</label>
+                  <label><input type="checkbox" data-conversion-channel="ch7" checked> 3</label>
+                  <label><input type="checkbox" data-conversion-channel="ch8" checked> 4</label>
+                </div>
+              </div>
             </div>
           </section>
 
+          <details class="settings-section modifier-section" open>
+            <summary><span>Modifiers</span></summary>
+            <div class="settings-card" id="modifier-card">
+              <label class="settings-row" for="modifier-pitch"><div class="row-copy"><strong>Pitch</strong><span>Lower to higher</span></div><div class="range-control"><input id="modifier-pitch" data-modifier="pitch" type="range" min="-100" max="100" value="0"><output>0</output></div></label>
+              <label class="settings-row" for="modifier-resonance"><div class="row-copy"><strong>Resonance</strong><span>Dry to resonant</span></div><div class="range-control"><input id="modifier-resonance" data-modifier="resonance" type="range" min="-100" max="100" value="0"><output>0</output></div></label>
+              <label class="settings-row" for="modifier-weight"><div class="row-copy"><strong>Weight</strong><span>Light to heavy</span></div><div class="range-control"><input id="modifier-weight" data-modifier="weight" type="range" min="-100" max="100" value="0"><output>0</output></div></label>
+              <label class="settings-row" for="modifier-intonation"><div class="row-copy"><strong>Intonation</strong><span>Loose to tuned</span></div><div class="range-control"><input id="modifier-intonation" data-modifier="intonation" type="range" min="-100" max="100" value="0"><output>0</output></div></label>
+              <label class="settings-row" for="modifier-texture"><div class="row-copy"><strong>Texture</strong><span>Raspy to smooth</span></div><div class="range-control"><input id="modifier-texture" data-modifier="texture" type="range" min="-100" max="100" value="0"><output>0</output></div></label>
+              <label class="settings-row" for="modifier-breathiness"><div class="row-copy"><strong>Breathiness</strong><span>Whispery to clear</span></div><div class="range-control"><input id="modifier-breathiness" data-modifier="breathiness" type="range" min="-100" max="100" value="0"><output>0</output></div></label>
+            </div>
+          </details>
+
           <section class="settings-section" aria-labelledby="sound-heading">
-            <h2 id="sound-heading">Sound check</h2>
-            <p class="section-description">Compare the original recording with the synthesized Game Boy channels.</p>
+            <h2 id="sound-heading">Comparison</h2>
             <div class="settings-card">
               <div class="settings-row">
                 <div class="row-icon"><span class="fluent-icon" aria-hidden="true">&#xE995;</span></div>
@@ -120,72 +138,124 @@
             </div>
           </section>
 
-          <button class="accent-button export-button" id="export-button" type="button" disabled>
-            <span class="fluent-icon" aria-hidden="true">&#xE74E;</span> Export ASM
-          </button>
+          <div class="export-actions">
+            <button class="accent-button export-button" id="export-button" type="button" disabled><span class="fluent-icon" aria-hidden="true">&#xE74E;</span> Export .asm</button>
+            <button class="standard-button export-button" id="export-wav-button" type="button" disabled><span class="fluent-icon" aria-hidden="true">&#xE74E;</span> Export .wav</button>
+          </div>
         </div>
       </section>
 
-      <section class="page" id="validation-page" aria-labelledby="validation-title" hidden>
+      <section class="page editor-page" id="editor-page" aria-labelledby="editor-title" hidden>
         <header class="page-header">
-          <div>
-            <h1 id="validation-title">Parameter validation</h1>
-            <p>Audition a pokecrystal cry with production pitch and length values.</p>
-          </div>
-          <button class="icon-button" id="validation-open-header" type="button" title="Open cry ASM" aria-label="Open cry ASM">
-            <span class="fluent-icon" aria-hidden="true">&#xE8E5;</span>
-          </button>
+          <div><h1 id="editor-title">Studio</h1></div>
         </header>
 
-        <div class="sections drop-surface">
-          <section class="settings-section" aria-labelledby="cry-heading">
-            <h2 id="cry-heading">Cry ASM</h2>
-            <div class="settings-card">
-              <div class="settings-row">
-                <div class="row-icon"><span class="fluent-icon" aria-hidden="true">&#xE8A5;</span></div>
-                <div class="row-copy"><strong id="asm-name">Select a cry</strong><span id="asm-detail">Open or drop a pokecrystal cry .asm file.</span></div>
-                <button class="standard-button" id="validation-open" type="button">Open…</button>
-              </div>
-              <label class="settings-row" id="cry-choice-row" for="cry-choice" hidden>
-                <div class="row-icon"><span class="fluent-icon" aria-hidden="true">&#xE8D6;</span></div>
-                <div class="row-copy"><strong>Cry</strong><span>Choose a header from this file</span></div>
-                <select id="cry-choice"></select>
-              </label>
-            </div>
-          </section>
-
-          <section class="settings-section" aria-labelledby="parameters-heading">
-            <h2 id="parameters-heading">Parameters</h2>
-            <p class="section-description">Uses pokecrystal’s signed pitch offset and 16-bit length value. Length 256 is the default tempo.</p>
-            <div class="settings-card">
-              <label class="settings-row" for="pitch-input">
-                <div class="row-icon"><span class="fluent-icon" aria-hidden="true">&#xE9D9;</span></div>
-                <div class="row-copy"><strong>Pitch</strong><span>Frequency offset · −32768 to 32767</span></div>
-                <input id="pitch-input" type="number" value="0" min="-32768" max="32767" step="1">
-              </label>
-              <label class="settings-row" for="length-input">
-                <div class="row-icon"><span class="fluent-icon" aria-hidden="true">&#xE916;</span></div>
-                <div class="row-copy"><strong>Length</strong><span>Tempo value · 0 to 65535</span></div>
-                <input id="length-input" type="number" value="256" min="0" max="65535" step="1">
-              </label>
-            </div>
-          </section>
-
-          <section class="settings-section" aria-labelledby="validation-sound-heading">
-            <h2 id="validation-sound-heading">Sound check</h2>
-            <p class="section-description">Changes apply immediately and restart the preview when it is playing.</p>
-            <div class="settings-card">
-              <div class="settings-row">
-                <div class="row-icon"><span class="fluent-icon" aria-hidden="true">&#xE995;</span></div>
-                <div class="row-copy"><strong>Cry preview</strong><span id="validation-detail">Open a cry to begin</span></div>
-                <span class="progress-ring" id="validation-progress" hidden aria-label="Rendering"></span>
-                <button class="play-button" id="validation-play" type="button" disabled aria-label="Play cry preview">
-                  <span class="fluent-icon" aria-hidden="true">&#xE768;</span>
-                </button>
-              </div>
-            </div>
-          </section>
+        <div id="editor-empty" class="hero-card drop-surface">
+          <div class="hero-icon"><span class="fluent-icon" aria-hidden="true">&#xE70F;</span></div>
+          <button class="accent-button" id="editor-open" type="button"><span class="fluent-icon" aria-hidden="true">&#xE8E5;</span> Open ASM</button>
         </div>
+
+        <div id="editor-content" class="editor-workspace" hidden>
+          <div class="editor-toolbar" role="toolbar" aria-label="Studio commands">
+            <button class="icon-button" id="editor-open-header" type="button" title="Open cry ASM" aria-label="Open cry ASM"><span class="fluent-icon" aria-hidden="true">&#xE8E5;</span></button>
+            <button class="icon-button" id="editor-save" type="button" title="Save ASM and WAV" aria-label="Save ASM and WAV" disabled><span class="fluent-icon" aria-hidden="true">&#xE74E;</span></button>
+            <button class="icon-button" id="editor-undo" type="button" title="Undo (Ctrl+Z)" aria-label="Undo" disabled><span class="fluent-icon" aria-hidden="true">&#xE7A7;</span></button>
+            <button class="icon-button" id="editor-redo" type="button" title="Redo (Ctrl+Shift+Z)" aria-label="Redo" disabled><span class="fluent-icon" aria-hidden="true">&#xE7A6;</span></button>
+            <span class="toolbar-separator" aria-hidden="true"></span>
+            <button class="toggle-button tool-button" id="editor-move-tool" type="button" title="Move notes (X)" aria-label="Move notes" aria-pressed="true"><span class="fluent-icon" aria-hidden="true">&#xE7C9;</span></button>
+            <button class="toggle-button tool-button" id="editor-draw-tool" type="button" title="Draw notes (X)" aria-label="Draw notes" aria-pressed="false"><span class="fluent-icon" aria-hidden="true">&#xE70F;</span></button>
+            <span class="toolbar-separator" aria-hidden="true"></span>
+            <button class="icon-button" id="editor-copy" type="button" title="Copy" aria-label="Copy"><span class="fluent-icon" aria-hidden="true">&#xE8C8;</span></button>
+            <button class="icon-button" id="editor-cut" type="button" title="Cut" aria-label="Cut"><span class="fluent-icon" aria-hidden="true">&#xE8C6;</span></button>
+            <button class="icon-button" id="editor-paste" type="button" title="Paste" aria-label="Paste"><span class="fluent-icon" aria-hidden="true">&#xE77F;</span></button>
+            <button class="icon-button" id="editor-delete" type="button" title="Delete" aria-label="Delete"><span class="fluent-icon" aria-hidden="true">&#xE74D;</span></button>
+            <span class="toolbar-separator" aria-hidden="true"></span>
+            <button class="icon-button" id="editor-zoom-out" type="button" title="Zoom out" aria-label="Zoom out"><span class="fluent-icon" aria-hidden="true">&#xE71F;</span></button>
+            <button class="icon-button" id="editor-zoom-in" type="button" title="Zoom in" aria-label="Zoom in"><span class="fluent-icon" aria-hidden="true">&#xE8A3;</span></button>
+            <button class="icon-button" id="editor-shortcuts" type="button" title="Shortcuts" aria-label="Studio shortcuts"><span class="fluent-icon" aria-hidden="true">&#xE897;</span></button>
+            <span class="toolbar-spacer"></span>
+            <select id="editor-cry-choice" aria-label="Select the cry pointer to edit" hidden></select>
+          </div>
+          <div class="transport-row">
+            <button class="play-button" id="editor-play" type="button" disabled aria-label="Play edited cry"><span class="fluent-icon" aria-hidden="true">&#xE768;</span></button>
+            <span id="editor-time">0.00 / 0.00 seconds</span>
+            <input id="editor-transport" type="range" min="0" max="1000" value="0" step="1" disabled aria-label="Studio playback position">
+            <label>Length <input id="editor-length" type="number" min="0" max="65535" value="256" aria-label="Expected pokecrystal length"></label>
+          </div>
+          <div class="editor-main">
+            <div class="piano-grid" aria-label="MIDI-style cry tracker">
+              <div class="piano-corner">Pitch</div>
+              <div class="tracker-ruler-viewport" id="timeline-ruler-viewport"><div class="timeline-ruler" id="timeline-ruler"></div></div>
+              <div class="piano-keyboard-viewport" id="piano-keyboard-viewport"><div class="piano-keyboard" id="piano-keyboard"></div></div>
+              <div class="timeline-scroll" id="timeline-scroll"><div class="piano-roll" id="note-timeline" role="application" aria-label="Cry piano roll"></div></div>
+              <div class="velocity-label">Volume</div>
+              <div class="velocity-viewport" id="velocity-viewport"><div class="velocity-lane" id="velocity-lane"></div></div>
+            </div>
+            <aside class="editor-hud" aria-label="Editor inspector">
+              <strong id="editor-file-name">No file open</strong>
+              <fieldset><legend>Channels</legend>
+                <label class="channel-1"><input type="checkbox" data-editor-channel="ch5" checked> Channel 1 · Pulse 1</label>
+                <label class="channel-2"><input type="checkbox" data-editor-channel="ch6" checked> Channel 2 · Pulse 2</label>
+                <label class="channel-3"><input type="checkbox" data-editor-channel="ch7" checked> Channel 3 · Wave</label>
+                <label class="channel-4"><input type="checkbox" data-editor-channel="ch8" checked> Channel 4 · Noise</label>
+              </fieldset>
+              <label>Active channel<select id="editor-active-channel"><option value="ch5">Channel 1</option><option value="ch6">Channel 2</option><option value="ch7">Channel 3</option><option value="ch8">Channel 4</option></select></label>
+              <fieldset id="editor-master-volume" disabled><legend>Master volume</legend>
+                <label>Left <input id="editor-volume-left" data-master-volume="left" type="number" min="0" max="7"></label>
+                <label>Right <input id="editor-volume-right" data-master-volume="right" type="number" min="0" max="7"></label>
+              </fieldset>
+              <strong id="editor-selection-label">No notes selected</strong>
+              <span id="editor-pitch-label">Pitch —</span>
+              <fieldset id="note-properties" disabled><legend>Selected notes</legend>
+                <label><span data-note-label="duration">Length</span> <input id="note-duration" data-note-property="duration" type="number" min="0" max="255"></label>
+                <label><span data-note-label="volume">Volume</span> <input id="note-volume" data-note-property="volume" type="number" min="0" max="15"></label>
+                <label><span data-note-label="envelope">Envelope fade</span> <input id="note-envelope" data-note-property="envelope" type="number" min="-7" max="8"></label>
+                <label><span data-note-label="frequency">Frequency register</span> <input id="note-frequency" data-note-property="frequency" type="number" min="0" max="2047"></label>
+                <label><span data-note-label="offsetOverride">Pitch offset</span> <input id="note-offset" data-note-property="offsetOverride" type="number" min="-32768" max="65535" value="0"></label>
+                <label>Stereo route <select id="note-route"><option value="both">Both</option><option value="left">Left</option><option value="right">Right</option><option value="none">Muted</option></select></label>
+                <label id="note-duty-row"><span data-note-label="duty">Duty cycle</span> <input id="note-duty" data-note-property="duty" type="number" min="0" max="3"></label>
+                <label id="note-pattern-row">Duty pattern <input id="note-duty-pattern" type="text" placeholder="0, 1, 2, 3"></label>
+                <label id="note-sweep-row"><span data-note-label="sweepPeriod">Sweep length</span> <input id="note-sweep-period" data-note-property="sweepPeriod" type="number" min="0" max="15"></label>
+                <label id="note-sweep-shift-row"><span data-note-label="sweepShift">Sweep change</span> <input id="note-sweep-shift" data-note-property="sweepShift" type="number" min="-7" max="8"></label>
+              </fieldset>
+            </aside>
+          </div>
+        </div>
+      </section>
+
+      <section class="page cry-list-page" id="validation-page" aria-labelledby="validation-title" hidden>
+        <header class="page-header">
+          <div>
+            <h1 id="validation-title">Editor</h1>
+          </div>
+          <div class="header-actions">
+            <button class="icon-button" id="validation-open-header" type="button" title="Open data/pokemon/cries.asm" aria-label="Open data/pokemon/cries.asm">
+              <span class="fluent-icon" aria-hidden="true">&#xE8E5;</span>
+            </button>
+            <button class="standard-button" id="validation-save" type="button" disabled><span class="fluent-icon" aria-hidden="true">&#xE74E;</span> Save</button>
+          </div>
+        </header>
+
+        <div id="validation-empty" class="hero-card drop-surface">
+          <div class="hero-icon"><span class="fluent-icon" aria-hidden="true">&#xE8A5;</span></div>
+          <button class="accent-button" id="validation-open" type="button"><span class="fluent-icon" aria-hidden="true">&#xE8E5;</span> Open cries.asm</button>
+        </div>
+
+        <div id="validation-content" hidden>
+          <div class="cry-list-summary">
+            <div><strong id="asm-name">cries.asm</strong><span id="asm-detail"></span></div>
+            <span class="progress-ring" id="validation-progress" hidden aria-label="Rendering"></span>
+          </div>
+          <div class="cry-list-scroll">
+            <div class="cry-list-table" role="table" aria-label="Pokémon cry parameters">
+              <div class="cry-list-grid cry-list-header" role="row">
+                <span></span><strong>Macro</strong><strong>Cry Constant</strong><strong>Pitch</strong><strong>Length</strong><strong>Species</strong>
+              </div>
+              <div id="cry-list-rows"></div>
+            </div>
+          </div>
+        </div>
+        <button id="validation-play" type="button" hidden disabled><span class="fluent-icon" aria-hidden="true">&#xE768;</span></button>
       </section>
     </main>
   </div>
@@ -195,7 +265,7 @@
 
   <dialog id="about-dialog" class="fluent-dialog">
     <form method="dialog">
-      <div class="dialog-hero"><img src="../data/io.github.mauvesea.Siren.svg" alt=""><div><h2>About Siren</h2><p>Version 1.1.0</p></div></div>
+      <div class="dialog-hero"><img src="../data/io.github.mauvesea.Siren.svg" alt=""><div><h2>About Siren</h2><p>Version 2.0.0</p></div></div>
       <p>Convert WAV audio and audition pokecrystal cry parameters.</p>
       <div class="dialog-links">
         <button type="button" data-url="https://github.com/mauvesea/siren">Repository</button>
@@ -207,9 +277,25 @@
     </form>
   </dialog>
 
+  <dialog id="studio-shortcuts-dialog" class="fluent-dialog shortcuts-dialog">
+    <form method="dialog">
+      <h2>Studio shortcuts</h2>
+      <div class="shortcut-grid">
+        <span>Undo / Redo</span><kbd>Ctrl+Z / Ctrl+Shift+Z</kbd>
+        <span>Cut / Copy / Paste</span><kbd>Ctrl+X / Ctrl+C / Ctrl+V</kbd>
+        <span>Delete selected notes</span><kbd>Delete</kbd>
+        <span>Previous / next note</span><kbd>← / →</kbd>
+        <span>Move / Draw tool</span><kbd>X</kbd>
+        <span>Zoom</span><kbd>Ctrl++ / Ctrl+− / Ctrl+wheel</kbd>
+      </div>
+      <div class="dialog-actions"><button class="standard-button" value="close">Close</button></div>
+    </form>
+  </dialog>
+
   <audio id="original-audio"></audio>
   <audio id="converted-audio"></audio>
   <audio id="validation-audio"></audio>
+  <audio id="editor-audio"></audio>
   <script type="module" src="renderer.js"></script>
 </body>
 </html>

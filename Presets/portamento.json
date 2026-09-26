@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "id": "portamento",
+  "name": "Portamento",
+  "description": "Smooth pitch transitions led by a clear programmable wave.",
+  "type": "profile",
+  "options": { "stepFrames": 1, "noiseGain": 0.3, "noiseMode": "texture", "effect": "portamento" }
+}

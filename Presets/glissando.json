@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "id": "glissando",
+  "name": "Glissando",
+  "description": "A continuous rise in pitch across the converted cry.",
+  "type": "profile",
+  "options": { "stepFrames": 1, "noiseMode": "texture", "effect": "glissando" }
+}

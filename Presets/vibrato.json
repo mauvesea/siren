@@ -12,6 +12,7 @@
     "noiseGain": 0.8,
     "secondGain": 0.8,
     "noiseMode": "texture",
-    "smoothing": "none"
+    "smoothing": "none",
+    "effect": "vibrato"
   }
 }

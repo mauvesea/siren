@@ -2,11 +2,11 @@ import Gio from 'gi://Gio';
 
 const textDecoder = new TextDecoder('utf-8');
 const MAX_PRESET_BYTES = 16 * 1024;
-const LIMITS = { id: 32, name: 32, description: 255, type: 32, noiseMode: 32 };
+const LIMITS = { id: 32, name: 32, description: 255, type: 32, noiseMode: 32, effect: 32 };
 const PROFILE_FIELDS = new Set([
   'noisePitch', 'noiseGain', 'minHz', 'maxHz', 'stepFrames',
   'secondGain', 'noiseMode', 'smoothing',
-  'precise',
+  'precise', 'effect',
 ]);
 
 function boundedString(value, field, filename) {
@@ -51,6 +51,12 @@ function validateProfile(preset, filename) {
     boundedString(options.smoothing, 'smoothing', filename);
     if (!['legacy', 'none'].includes(options.smoothing))
       throw new Error(`${filename}: smoothing must be “legacy” or “none”.`);
+  }
+  if (options.effect !== undefined) {
+    boundedString(options.effect, 'effect', filename);
+    if (!['none', 'deep', 'tremolo', 'vibrato', 'glissando', 'portamento',
+      'digital', 'fry', 'breathy', 'falsetto'].includes(options.effect))
+      throw new Error(`${filename}: unsupported effect “${options.effect}”.`);
   }
   if ((options.minHz ?? 120) > (options.maxHz ?? 1100))
     throw new Error(`${filename}: minHz cannot exceed maxHz.`);
@@ -99,6 +105,8 @@ function validatePreset(preset, filename) {
 }
 
 function comparePresets(a, b) {
+  if (a.id === 'none') return b.id === 'none' ? 0 : -1;
+  if (b.id === 'none') return 1;
   if (a.id === 'auto') return b.id === 'auto' ? 0 : -1;
   if (b.id === 'auto') return 1;
   if (a.id === 'precise') return b.id === 'precise' ? 0 : 1;

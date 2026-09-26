@@ -10,11 +10,24 @@ const DUTY_PATTERNS = [0x01, 0x81, 0x87, 0x7e];
 
 function timeline(notes) {
   let end = 0;
-  return notes.map(note => {
+  const result = notes.map(note => {
     const start = end;
     end += note.frames ?? note.duration + 1;
     return { note, start, end };
   });
+  const last = result.at(-1);
+  if (last) {
+    const raw = last.note.envelope < 0 ? 8 - last.note.envelope : last.note.envelope;
+    const period = raw & 7;
+    // A decaying APU envelope can remain audible after the command stream has
+    // reached sound_ret. Preserve its remaining non-zero steps instead of
+    // truncating the final note at the sequencer boundary.
+    if (!(raw & 8) && period && last.note.volume > 1) {
+      const releaseFrames = (last.note.volume - 1) * period * FRAME_RATE / 64;
+      last.end = Math.max(last.end, last.start + releaseFrames);
+    }
+  }
+  return result;
 }
 
 function envelopeVolume(note, noteTime) {
@@ -51,7 +64,13 @@ export function renderPreview(project, maxSeconds = 10) {
   if (totalFrames / FRAME_RATE > maxSeconds && !project.allowTruncatedPreview)
     throw new Error(`Preview is limited to ${maxSeconds} seconds.`);
   const duration = project.previewDuration ?? project.sourceDuration ?? totalFrames / FRAME_RATE;
-  const count = Math.ceil(Math.min(totalFrames / FRAME_RATE, duration, maxSeconds) * outputRate);
+  const contentDuration = Math.min(totalFrames / FRAME_RATE, duration, maxSeconds);
+  // The engine processes sound_ret on the update after the last audible note.
+  // Render that silent update too, allowing the output filter to settle before
+  // WAV end-of-stream instead of cutting off on the final non-zero sample.
+  const reachedSoundRet = contentDuration >= totalFrames / FRAME_RATE;
+  const releaseDuration = reachedSoundRet ? 1 / FRAME_RATE : 0;
+  const count = Math.ceil((contentDuration + releaseDuration) * outputRate);
   const samples = new Float64Array(count);
   const stereo = Boolean(project.pan) || Object.values(project.channels).some(notes =>
     notes.some(note => note.route && note.route !== 'both'));

@@ -4,60 +4,44 @@
 
 # Siren
 
-Siren converts WAV recordings into Game Boy cries and lets you audition
-the pitch and length of existing cry ASM files for
-[pokecrystal](https://github.com/pret/pokecrystal). The cries use Game Boy
-square-wave channels 5 and 6 and noise channel 8. The **Precise** preset can
-also use the built-in wave channel 7. Generated cries are intended
-for **pitch 0** and **length 256**.
+**Siren** is a tool designed to help convert .wav files into [pokecrystal](https://github.com/pret/pokecrystal)-compatible cries. It can also be used to edit cry properties, as well as edit the files directly.
 
-This tool is AI assisted.
+The converted cries are designed with **pitch 0** and **length 256** as a baseline.
 
-## Using the app
+This tool is has been developed with AI assistance.
 
-Select **File Converter** at the top of the window, then choose or drop a WAV.
-The application prepares the audio internally, recommends a preset, and
-synthesizes a converted sound. Listen to the original and converted versions
-in Sound Check, choose another preset to compare, adjust **Volume**, and add
-an optional **Fade In** or **Fade Out**, then select **Export** to
-create an `.asm` file beside the source WAV.
+## Converter
 
-Siren detects the converted cry's loudest channel level and starts **Volume**
-there. The slider spans silence to the Game Boy hardware maximum; higher
-settings use any remaining channel headroom and cap at that limit. Fades use
-stock frame-aligned volume steps over the first or last 25%
-of the cry, so the exported ASM requires no engine changes. Because the wave
-channel exposes only full, half, quarter, and mute levels, its fades are
-necessarily coarser than the pulse and noise channels.
+The **Converter** tab can be used to input .wav files and output a compatible .asm file.
+You can use a variety of effects and fine-tune it using the Modifier sliders.
+The default Effect is **None**, which is the raw converted file.
 
-The intermediate prepared WAV is hidden and the former note editor has been
-removed. Input stays on your computer. Siren accepts uncompressed PCM
-8/16/24/32-bit and IEEE float 32/64-bit WAVs, including
-WAVE_FORMAT_EXTENSIBLE, with up to eight channels. Files must be no larger than
-20 MB or longer than five seconds. The preview approximates the Game Boy audio
-hardware; an emulator or real hardware remains the final reference.
-For reliable playback across Linux audio backends, Siren plays an internal
-16-bit, 44.1 kHz copy that preserves the source duration and channel layout.
-The source file is not changed.
+Selecing an Effect will automatically set the Modifiers to positions based on the engine training data, but they can be adjusted as needed.
 
-Select **Parameter Validation** to open or drop a cry `.asm` file. If the file
-contains several cries, choose one from the **Cry** list. Adjust **Pitch**
-(−32768 to 32767) and **Length** (0 to 65535), then play the preview. If it is
-already playing, changing either value restarts playback with the new value.
-The controls mirror pokecrystal's signed 16-bit pitch offset and unsigned
-16-bit length: pitch affects both square and noise frequencies, while length
-changes the square-channel tempo and leaves the noise channel at its default.
-Parameter Validation does not export or modify the ASM file.
-Very long cries play their first 15 seconds so every allowed parameter value
-can still be auditioned promptly.
+It's also possible to adjust the overall Volume, add a Fade in and/or Fade out effect, as well as disable specific channels.
 
-The validator understands pokecrystal cry headers, square, wave and noise notes,
-duty cycles and patterns, pitch offsets and sweeps, stereo routing and volume,
-and finite jumps, calls, and loops within the chosen file. It reports unsupported commands instead of
-silently playing them incorrectly. The preview simulates the Game Boy's
-digital channels and timing; analog output coloration and playback hardware
-can still sound different, so confirm final values in an emulator or on a
-Game Boy.
+The exported .asm files contain in their headers the Siren version and the selected Effect, Volume, Fades, Channels, Pitch, Resonance, Weight, Intonation, Texture, and Breathiness settings.
+
+The intermediate prepared WAV is hidden and input stays on your computer. Siren accepts uncompressed PCM 8/16/24/32-bit and IEEE float 32/64-bit WAVs, including WAVE_FORMAT_EXTENSIBLE, with up to eight channels. Files must be no larger than 20 MB or longer than five seconds. The preview approximates the Game Boy audio hardware; an emulator or real hardware remains the final reference. For reliable playback across Linux audio backends, Siren plays an internal 16-bit, 44.1 kHz copy that preserves the source duration and channel layout. The source file is not changed.
+
+
+## Editor
+
+The **Editor** allows you to edit the cry list from `/data/pokemon/cries.asm`. Siren loads the available options from
+`constants/cry_constants.asm` and the matching sound definitions from `audio/cries.asm` and cry-specific audio subdirectories. Every list entry exposes its macro, cry constant, decimal pitch, decimal length, and the Species name as a comment. The play button beside a row auditions its current constant and parameter values. Very long cries play their first 15 seconds.
+
+Opening the list immediately writes `data/pokemon/cries.asm.backup`. Saving rewrites only changed cry-list rows, preserving every other source line and leaving the backup as the snapshot created at open time. Pitch uses the signed 16-bit range −32768 to 32767 and length uses the unsigned range 0 to 65535.
+
+The validator understands pokecrystal cry headers, square, wave and noise notes, duty cycles and patterns, pitch offsets and sweeps, stereo routing and volume, and finite jumps, calls, and loops within the chosen file. It reports unsupported commands instead of silently playing them incorrectly. The preview simulates the Game Boy's digital channels and timing; analog output coloration and playback hardware can still sound different, so confirm final values in an emulator or on a Game Boy.
+
+
+## Studio
+
+The **Studio** is a sound editor for .asm cries. It can open a cry `.asm` file as a four-color MIDI-style timeline.
+Pitch is defined by the piano row a note occupies and time runs from left to right. Notes can be drawn, box-selected, moved in time, transposed vertically, resized from their right edge, copied with Ctrl+C, pasted at the same timeline position on the active channel with Ctrl+V, cut, and deleted. A 100-step history supports Ctrl+Z and Ctrl+Shift+Z; X switches between the Move Notes and Draw Notes tools while no notes are selected. Delete removes selected notes, while Left and Right move a single-note selection through the active channel. Checked inactive channels remain visible as dim reference tracks but cannot be edited. New notes start at one frame long and then inherit the length of the last note clicked during the session.
+The volume lane under the roll provides direct level editing, while the inspector exposes exact duration, envelope or wave, frequency, duty, and sweep commands. The roll scrolls in both directions and zooms with Ctrl+mouse wheel. The Shortcuts button beside the zoom controls opens the full shortcut reference. Click the frame ruler or transport bar to seek; channel visibility checkboxes also mute those channels in the live preview without deleting their notes. The transport previews the selected pokecrystal length. Editor audio is rendered in full when Play is pressed and cached until a note, channel, or playback setting changes.
+
+Opening an ASM in the editor immediately preserves its original contents as a neighboring `.asm.backup` file, without replacing an existing backup. Saving rewrites the input ASM and exports the currently selected cry as a neighboring WAV using the current length and enabled-channel settings.
 
 ## Running from source
 
@@ -76,9 +60,9 @@ playback plugins. On Fedora these are normally provided by `gjs`, `gtk4`,
 
 ### Windows 11
 
-The Windows build provides the same converter, automatic and fixed presets,
-WAV/ASM drag-and-drop, previews, ASM export, and parameter validation as the
-Linux build. It uses a Windows-specific Fluent 2 interface with the native
+The Windows build provides WAV/ASM drag-and-drop, effects, modifiers, both
+export formats, parameter validation, and Studio. It uses a
+Windows-specific Fluent 2 interface with the native
 Mica backdrop, layered translucent surfaces, Segoe UI Variable, and automatic
 light, dark, contrast-theme, and reduced-motion support.
 
@@ -92,11 +76,11 @@ npm run windows
 Bundled presets are extended or overridden on Windows by JSON files in
 `%APPDATA%\siren\Presets`, using the same schema and precedence rules as Linux.
 
-## Presets
+## Effects
 
-Every profile is a readable JSON file in [`Presets`](Presets). The **Auto**
-preset searches the available profiles for a close match. The menu sorts
-presets alphabetically by `id`.
+Every effect is a readable JSON file in [`Presets`](Presets). **None** is the
+default, **Auto** searches the available profiles, named effects are sorted by
+name, and **Precise** remains last.
 
 **Precise** compares two reconstructions at each playable Game Boy frame and
 keeps the closer measured fit. It uses pokecrystal's fixed wave patterns,
@@ -104,6 +88,10 @@ follows source dynamics, retains overall stereo balance from two-channel WAVs,
 and merges repeated commands. A stock cry
 cannot preserve arbitrary PCM samples, sample rate, or bit depth. See the
 [engine analysis and fidelity limits](docs/precise-engine.md).
+
+**Gen 3**, **Gen 4**, and **Gen 5** are generation-inspired category effects.
+They retain the broad sonic direction of each source generation while emitting
+only stock Game Boy hardware commands.
 
 See [`Presets/README.md`](Presets/README.md) for fields and limits. In a source
 checkout, add files to `Presets/`. For an AppImage, add a `Presets` folder beside
@@ -148,7 +136,7 @@ npm install
 npm run windows:pack
 ```
 
-This produces one `Siren-1.1.0.exe` in `dist`, containing the x64 and Arm64
+This produces one `Siren-2.0.0.exe` in `dist`, containing the x64 and Arm64
 payloads. It is a self-contained portable app: it can be launched directly and
 does not need an installer or adjacent runtime files. Use
 `npm run windows:dir` for unpacked development builds.
@@ -182,4 +170,4 @@ to `constants/cry_constants.asm` and a `dba Cry_<Label>` pointer to
 `mon_cry CRY_<LABEL>, 0, 256` in `data/pokemon/cries.asm`.
 
 Arbitrary PCM cannot be represented exactly by two square waves and one noise
-generator, so trying several presets is part of the intended workflow.
+generator, so trying several effects is part of the intended workflow.
