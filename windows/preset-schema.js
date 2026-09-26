@@ -1,8 +1,8 @@
-const LIMITS = { id: 32, name: 32, description: 255, type: 32, noiseMode: 32, tracking: 16 };
+const LIMITS = { id: 32, name: 32, description: 255, type: 32, noiseMode: 32, effect: 32 };
 const PROFILE_FIELDS = new Set([
   'noisePitch', 'noiseGain', 'minHz', 'maxHz', 'stepFrames',
   'secondGain', 'noiseMode', 'smoothing',
-  'precise', 'tracking', 'pitchShift',
+  'precise', 'effect',
 ]);
 
 function boundedString(value, field, filename) {
@@ -23,7 +23,6 @@ function validateProfile(preset, filename) {
   const ranges = {
     noisePitch: [0, 255], noiseGain: [0, 4], minHz: [64, 1800],
     maxHz: [64, 1800], stepFrames: [1, 2], secondGain: [0, 1],
-    pitchShift: [-24, 24],
   };
   for (const key of Object.keys(preset.options)) {
     if (key.length > 16 || !PROFILE_FIELDS.has(key))
@@ -48,13 +47,12 @@ function validateProfile(preset, filename) {
     if (!['legacy', 'none'].includes(preset.options.smoothing))
       throw new Error(`${filename}: smoothing must be “legacy” or “none”.`);
   }
-  if (preset.options.tracking !== undefined) {
-    boundedString(preset.options.tracking, 'tracking', filename);
-    if (!['tremolo', 'sustain', 'bulky'].includes(preset.options.tracking))
-      throw new Error(`${filename}: tracking must be “tremolo”, “sustain”, or “bulky”.`);
+  if (preset.options.effect !== undefined) {
+    boundedString(preset.options.effect, 'effect', filename);
+    if (!['none', 'deep', 'tremolo', 'vibrato', 'glissando', 'portamento',
+      'digital', 'fry', 'breathy', 'falsetto'].includes(preset.options.effect))
+      throw new Error(`${filename}: unsupported effect “${preset.options.effect}”.`);
   }
-  if (preset.options.pitchShift !== undefined && preset.options.tracking === undefined)
-    throw new Error(`${filename}: pitchShift requires a tracking profile.`);
   if ((preset.options.minHz ?? 120) > (preset.options.maxHz ?? 1100))
     throw new Error(`${filename}: minHz cannot exceed maxHz.`);
 }
@@ -104,6 +102,8 @@ export function validatePreset(preset, filename) {
 }
 
 function comparePresets(a, b) {
+  if (a.id === 'none') return b.id === 'none' ? 0 : -1;
+  if (b.id === 'none') return 1;
   if (a.id === 'auto') return b.id === 'auto' ? 0 : -1;
   if (b.id === 'auto') return 1;
   if (a.id === 'precise') return b.id === 'precise' ? 0 : 1;

@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "id": "fry",
+  "name": "Fry",
+  "description": "A low, irregular and raspy vocal-fry-like texture.",
+  "type": "profile",
+  "options": { "minHz": 64, "maxHz": 900, "noisePitch": 44, "noiseGain": 1.7, "noiseMode": "texture", "effect": "fry" }
+}

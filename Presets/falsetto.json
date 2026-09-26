@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "id": "falsetto",
+  "name": "Falsetto",
+  "description": "A lighter, higher counterpart to Deep.",
+  "type": "profile",
+  "options": { "minHz": 150, "maxHz": 1800, "noiseGain": 0.3, "secondGain": 0.9, "noiseMode": "texture", "effect": "falsetto" }
+}

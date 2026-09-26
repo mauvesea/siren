@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "gen5",
+  "name": "Gen 5",
+  "description": "Validated on all 161 Gen 5 references: wide clean tracking for the generation's varied pitch motion and richer timbres.",
+  "type": "profile",
+  "options": {
+    "minHz": 64,
+    "maxHz": 1800,
+    "stepFrames": 1,
+    "noiseGain": 0,
+    "secondGain": 0.75,
+    "noiseMode": "texture",
+    "smoothing": "none",
+    "effect": "none"
+  }
+}

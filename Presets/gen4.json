@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "gen4",
+  "name": "Gen 4",
+  "description": "Validated on all 109 Gen 4 references: broad pitch coverage and crisp layered attacks without artificial noise.",
+  "type": "profile",
+  "options": {
+    "minHz": 64,
+    "maxHz": 1800,
+    "stepFrames": 1,
+    "noiseGain": 0,
+    "secondGain": 1,
+    "noiseMode": "texture",
+    "smoothing": "none",
+    "effect": "digital"
+  }
+}

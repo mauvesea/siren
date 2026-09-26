@@ -3,8 +3,7 @@ import GLib from 'gi://GLib';
 
 import { applyConversionEffects, convert, encodeWav, makeAsm, makePlaybackWav, prepareWav, readWav } from '../../src/converter.js';
 import { parseCryAsm } from '../../src/cry-asm.js';
-import { fitAutoPreset, fitPrecisePreset, suggestPreset } from '../../src/preset-engine.js';
-import { applyVoiceControls, DEFAULT_VOICE_CONTROLS } from '../../src/modifier-engine.js';
+import { fitAutoPreset, fitPrecisePreset, scoreProfilePresets, suggestPreset } from '../../src/preset-engine.js';
 import { loadPresets } from '../../src/preset-loader.js';
 import { renderPreview } from '../../src/preview.js';
 
@@ -33,25 +32,22 @@ const presets = loadPresets(GLib.build_filenamev([root, 'Presets']));
 const profiles = presets.filter(preset => preset.type === 'profile');
 const autoPreset = presets.find(preset => preset.type === 'auto');
 
-assert(presets.length === 15, 'Expected all 15 base presets.');
-assert(profiles.length === 14, 'Expected 14 fixed conversion profiles.');
-assert(presets[0].id === 'auto', 'Auto must be the first preset.');
+assert(presets.length === 15, 'Expected all 15 effects and conversion modes.');
+assert(profiles.length === 14, 'Expected 14 fixed effects and conversion modes.');
+assert(presets[0].id === 'none', 'None must be the first effect.');
+assert(presets[1].id === 'auto', 'Auto must follow None.');
 assert(presets.at(-1).id === 'precise', 'Precise must be the last preset.');
-assert(presets.slice(1, -1).every((preset, index, middle) =>
+assert(presets.slice(2, -1).every((preset, index, middle) =>
   index === 0 || middle[index - 1].name.localeCompare(preset.name) <= 0),
   'Other presets must be ordered alphabetically by name.');
-assert(presets.find(preset => preset.id === 'clean')?.name === 'Clean',
-  'The former Default preset must be called Clean.');
+assert(presets.find(preset => preset.id === 'none')?.name === 'None',
+  'The clean default must be called None.');
 assert([
-  'airy', 'bright', 'bulky', 'clean', 'hollow', 'long_notes', 'noisy', 'precise',
-  'punchy', 'raspy', 'roar', 'textured', 'tremolo', 'vibrato',
-].every(id => profiles.some(preset => preset.id === id)), 'Expected the revised profile presets.');
-assert(presets.every(preset => !preset.id.startsWith('deep_') && !preset.id.startsWith('bass_')),
-  'Prefixed presets must be represented by modifiers instead.');
-assert(presets.every(preset => !/^(Bass \(|Deep )/.test(preset.name)),
-  'Bundled preset names must not contain baked-in modifiers.');
-assert(Object.values(DEFAULT_VOICE_CONTROLS).every(value => value === 0),
-  'Voice controls must default to their neutral midpoint.');
+  'none', 'deep', 'tremolo', 'vibrato', 'glissando', 'portamento', 'digital',
+  'fry', 'breathy', 'falsetto', 'gen3', 'gen4', 'gen5', 'precise',
+].every(id => profiles.some(preset => preset.id === id)), 'Expected all Siren 2 effects.');
+assert(['airy', 'bright', 'clean', 'noisy', 'roar', 'textured'].every(id =>
+  !presets.some(preset => preset.id === id)), 'Removed presets must stay removed.');
 assert(Boolean(autoPreset), 'Expected the Auto preset.');
 assert(JSON.stringify(autoPreset.search.noiseGainFactors) === JSON.stringify([0, 0.5, 1.5, 2.5]),
   'Auto noise gain search changed.');
@@ -79,13 +75,14 @@ const stereoPlayback = readWav(makePlaybackWav(stereoSource));
 assert(stereoPlayback.channels === 2 && stereoPlayback.samples.length === 44100,
   'Playback normalization should preserve the source channel layout.');
 const prepared = prepareWav(source);
-const cleanPreset = presets.find(preset => preset.id === 'clean');
+const cleanPreset = presets.find(preset => preset.id === 'none');
 const project = { ...convert(readWav(prepared.wav).samples, cleanPreset.options), label: 'TwoTones' };
 assert(project.frames === 17, 'Conversion frame count changed.');
 assert(project.channels.ch5.length === 9, 'Primary channel note count changed.');
 assert(project.channels.ch6.length === 9, 'Secondary channel note count changed.');
+assert(project.channels.ch7.length === 9, 'Wave channel note count changed.');
 assert(project.channels.ch8.length === 9, 'Noise channel note count changed.');
-assert(makeAsm(project, 'two_tones.wav').includes('Cry_TwoTones_Ch8:'), 'ASM output is incomplete.');
+assert(makeAsm(project, 'two_tones.wav').includes('Cry_TwoTones_Ch7:'), 'ASM output is incomplete.');
 assert(readWav(renderPreview(project)).rate === 44100, 'Preview sample rate changed.');
 const louder = applyConversionEffects(project, { volumePercent: 100 });
 assert(louder.channels.ch5.every((note, index) => note.volume >= project.channels.ch5[index].volume),
@@ -102,64 +99,22 @@ assert(profiles.some(preset => preset.id === suggestion.id),
   'Automatic recommendation should choose an available profile.');
 assert(Number.isFinite(suggestion.features.peakHz) && suggestion.features.peakHz > 0,
   'Automatic recommendation should analyze the WAV samples.');
-assert(!('modifierId' in suggestion), 'Automatic recommendation must not guess voice controls.');
 const tone = hz => Float64Array.from({ length: 17 * 176 },
   (_, i) => 0.5 * Math.sin(2 * Math.PI * hz * i / rate));
 assert(suggestPreset(tone(120)).id !== suggestPreset(tone(1400)).id,
   'Automatic recommendation should respond to the WAV spectrum.');
 
 const shortSamples = samples.subarray(0, 5 * 176);
+const scoredProfiles = scoreProfilePresets(shortSamples, [
+  { id: 'none', options: cleanPreset.options },
+  { id: 'gen3', options: presets.find(preset => preset.id === 'gen3').options },
+]);
+assert(scoredProfiles.length === 2 && scoredProfiles.every(item => Number.isFinite(item.score)),
+  'Batch profile scoring should measure every training candidate.');
 const fitted = fitAutoPreset(shortSamples, profiles, autoPreset);
 assert(Number.isFinite(fitted.score), 'Auto did not produce a finite match score.');
 assert(profiles.some(preset => preset.id === fitted.basis), 'Auto chose an unknown profile.');
 assert(readWav(renderPreview(fitted.result)).rate === 44100, 'Auto preview is not playable.');
-
-const regular = convert(tone(440), cleanPreset.options);
-const neutral = applyVoiceControls(regular);
-const low = applyVoiceControls(regular, { pitch: -1 });
-const high = applyVoiceControls(regular, { pitch: 1 });
-const raisedHalfway = applyVoiceControls(regular, { pitch: 0.5 });
-const firstHz = result => 131072 / (2048 - result.channels.ch5.find(note => note.volume).frequency);
-assert(Math.abs(firstHz(low) / firstHz(regular) - 0.5) < 0.03,
-  'Low should transpose tonal voices down one octave.');
-assert(Math.abs(firstHz(high) / firstHz(regular) - 2) < 0.06,
-  'High should transpose tonal voices up one octave.');
-assert(Math.abs(firstHz(raisedHalfway) / firstHz(regular) - Math.sqrt(2)) < 0.04,
-  'Intermediate pitch values should provide proportional fine tuning.');
-assert(firstHz(neutral) === firstHz(regular), 'Neutral controls must not change pitch.');
-const dark = applyVoiceControls(regular, { resonance: -1 });
-const bright = applyVoiceControls(regular, { resonance: 1 });
-assert(dark.channels.ch5.every(note => note.duty === undefined || note.duty >= 1),
-  'Dark should avoid the thinnest pulse resonance.');
-assert(bright.channels.ch5.every(note => note.duty === undefined || note.duty <= 1),
-  'Bright should favor narrow pulse resonance.');
-const heavy = applyVoiceControls(regular, { weight: 1 });
-const light = applyVoiceControls(regular, { weight: -1 });
-assert(heavy.channels.ch6.reduce((sum, note) => sum + note.volume, 0) >=
-  regular.channels.ch6.reduce((sum, note) => sum + note.volume, 0),
-  'Heavy should strengthen the supporting pulse layer.');
-assert(light.channels.ch6.reduce((sum, note) => sum + note.volume, 0) <=
-  regular.channels.ch6.reduce((sum, note) => sum + note.volume, 0),
-  'Light should reduce the supporting pulse layer.');
-const contour = {
-  channels: {
-    ch5: [
-      { duration: 3, volume: 10, envelope: 8, frequency: 1452, duty: 2 },
-      { duration: 3, volume: 10, envelope: 8, frequency: 1750, duty: 2 },
-    ], ch6: [], ch7: [], ch8: [],
-  },
-};
-const contourRatio = result => {
-  const notes = result.channels.ch5;
-  return (131072 / (2048 - notes[1].frequency)) / (131072 / (2048 - notes[0].frequency));
-};
-assert(contourRatio(applyVoiceControls(contour, { intonation: 1 })) > contourRatio(contour),
-  'Wide should expand the pitch contour.');
-assert(contourRatio(applyVoiceControls(contour, { intonation: -1 })) < contourRatio(contour),
-  'Shallow should compress the pitch contour.');
-parseCryAsm(makeAsm({ ...applyVoiceControls(regular, {
-  pitch: 0.35, resonance: -0.6, weight: 0.4, intonation: 0.75,
-}), label: 'Modified' }));
 
 const precise = fitPrecisePreset(shortSamples);
 assert(Number.isFinite(precise.score) && readWav(precise.preview).rate === 44100,
@@ -193,10 +148,6 @@ try {
     'Other string parameters over 16 characters must be rejected.');
   rejects({ ...basePreset, options: { noiseGain: 1e309 } },
     'Nonfinite numeric parameters must be rejected.');
-  rejects({ ...basePreset, options: { pitchShift: -25 } },
-    'Tracking pitch shifts below two octaves must be rejected.');
-  rejects({ ...basePreset, options: { pitchShift: -12 } },
-    'Pitch shifts without a tracking engine must be rejected.');
 } finally {
   testFile.delete(null);
   testDirectory.delete(null);

@@ -2,9 +2,7 @@
   "schemaVersion": 1,
   "id": "tremolo",
   "name": "Tremolo",
-  "description": "Keeps fast melodic warbles on one channel while a separate pulse channel carries the rhythmic effect.",
+  "description": "Regular volume movement while pitch remains steady.",
   "type": "profile",
-  "options": {
-    "tracking": "tremolo"
-  }
+  "options": { "noiseMode": "texture", "effect": "tremolo" }
 }

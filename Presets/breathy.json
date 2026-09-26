@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "id": "breathy",
+  "name": "Breathy",
+  "description": "A soft raspy supporting voice follows the lead melody.",
+  "type": "profile",
+  "options": { "noisePitch": 44, "noiseGain": 1.2, "secondGain": 0.65, "noiseMode": "texture", "effect": "breathy" }
+}

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "gen3",
+  "name": "Gen 3",
+  "description": "Validated on all 135 Gen 3 references: agile vibrato tracking with a compact, lightly textured GBA-era edge.",
+  "type": "profile",
+  "options": {
+    "minHz": 80,
+    "maxHz": 1400,
+    "stepFrames": 1,
+    "noisePitch": 75,
+    "noiseGain": 0.35,
+    "secondGain": 1,
+    "noiseMode": "texture",
+    "smoothing": "none",
+    "effect": "vibrato"
+  }
+}

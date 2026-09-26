@@ -1,14 +1,16 @@
 version: 1
 
 script:
+  - rm -rf SirenAppDir
   - install -d SirenAppDir/usr/bin SirenAppDir/usr/lib/siren SirenAppDir/usr/share/siren/Presets
-  - install -d SirenAppDir/usr/share/applications SirenAppDir/usr/share/icons/hicolor/scalable/apps SirenAppDir/usr/share/icons/hicolor/symbolic/apps SirenAppDir/usr/share/metainfo
+  - install -d SirenAppDir/usr/share/applications SirenAppDir/usr/share/icons/hicolor/scalable/apps SirenAppDir/usr/share/icons/hicolor/symbolic/apps SirenAppDir/usr/share/icons/hicolor/symbolic/actions SirenAppDir/usr/share/metainfo
   - install -m 0755 siren SirenAppDir/usr/bin/siren
   - install -m 0644 src/*.js SirenAppDir/usr/lib/siren/
   - install -m 0644 Presets/*.json Presets/README.md SirenAppDir/usr/share/siren/Presets/
   - install -m 0644 data/io.github.mauvesea.Siren.desktop SirenAppDir/usr/share/applications/
   - install -m 0644 data/io.github.mauvesea.Siren.svg SirenAppDir/usr/share/icons/hicolor/scalable/apps/
   - install -m 0644 data/io.github.mauvesea.Siren-symbolic.svg SirenAppDir/usr/share/icons/hicolor/symbolic/apps/
+  - install -m 0644 data/icons/hicolor/symbolic/actions/questionmark-symbolic.svg SirenAppDir/usr/share/icons/hicolor/symbolic/actions/
   - install -m 0644 data/io.github.mauvesea.Siren.metainfo.xml SirenAppDir/usr/share/metainfo/
   - install -m 0644 data/io.github.mauvesea.Siren.metainfo.xml SirenAppDir/usr/share/metainfo/io.github.mauvesea.Siren.appdata.xml
 
@@ -18,7 +20,7 @@ AppDir:
     id: io.github.mauvesea.Siren
     name: Siren
     icon: io.github.mauvesea.Siren
-    version: 1.1.1
+    version: 2.0.0
     exec: usr/bin/gjs
     exec_args: -m $APPDIR/usr/lib/siren/main.js $@
   apt:

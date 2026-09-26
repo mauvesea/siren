@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "none",
+  "name": "None",
+  "description": "A clean, straight four-channel tone with no expressive effect applied.",
+  "type": "profile",
+  "options": {
+    "noisePitch": 92,
+    "noiseGain": 0.35,
+    "secondGain": 0.75,
+    "noiseMode": "texture",
+    "effect": "none"
+  }
+}

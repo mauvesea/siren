@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "id": "digital",
+  "name": "Digital",
+  "description": "Hard, immediate note edges with almost no envelope fade.",
+  "type": "profile",
+  "options": { "stepFrames": 1, "noiseGain": 0.45, "noiseMode": "texture", "effect": "digital" }
+}

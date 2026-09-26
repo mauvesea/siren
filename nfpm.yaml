@@ -1,7 +1,7 @@
 name: siren
 arch: amd64
 platform: linux
-version: 1.1.1
+version: 2.0.0
 release: 1
 section: sound
 priority: optional
@@ -27,6 +27,8 @@ contents:
     dst: /usr/share/icons/hicolor/scalable/apps/io.github.mauvesea.Siren.svg
   - src: ./data/io.github.mauvesea.Siren-symbolic.svg
     dst: /usr/share/icons/hicolor/symbolic/apps/io.github.mauvesea.Siren-symbolic.svg
+  - src: ./data/icons/hicolor/symbolic/actions/questionmark-symbolic.svg
+    dst: /usr/share/icons/hicolor/symbolic/actions/questionmark-symbolic.svg
   - src: ./data/io.github.mauvesea.Siren.metainfo.xml
     dst: /usr/share/metainfo/io.github.mauvesea.Siren.metainfo.xml
 
